@@ -1,6 +1,6 @@
-# [Project name]
+# Gwen Inventario
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Aplicación móvil offline-first para que tenderos gestionen productos, existencias y alertas de inventario por tienda.
 
 ## Run & Operate
 
@@ -10,6 +10,7 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
+- Gwen Inventario requiere `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_ANON_KEY` para login y sincronización remota.
 
 ## Stack
 
@@ -22,15 +23,21 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/gwen-inventario/app/` — rutas Expo Router, autenticación, dashboard e inventario.
+- `artifacts/gwen-inventario/src/domain/` — modelos y contratos de dominio.
+- `artifacts/gwen-inventario/src/services/products/productService.ts` — reglas de productos, estados, persistencia local y sync.
+- `artifacts/gwen-inventario/src/presentation/context/ProductContext.tsx` — estado compartido del catálogo.
+- `artifacts/gwen-inventario/supabase/migrations/` — SQL de aislamiento por tienda y tablas de Fase 3.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Las operaciones de productos se guardan primero en AsyncStorage y luego se encolan para sincronización.
+- Supabase usa Row Level Security; el `store_id` se valida contra el perfil autenticado.
+- Los productos vencidos permanecen visibles y gestionables; solo se muestran como vencidos/por vencer.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Login y registro con Supabase, dashboard de inventario, CRUD completo de productos, categorías iniciales y personalizadas, búsqueda, filtros, alertas de stock bajo/agotado/próximo a vencer y cola offline por tienda.
 
 ## User preferences
 

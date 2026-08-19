@@ -1,0 +1,1 @@
+- [Expo Router directory routes](expo-router-directory-routes.md) — Stack entries for folder indexes must use the explicit `folder/index` route name.

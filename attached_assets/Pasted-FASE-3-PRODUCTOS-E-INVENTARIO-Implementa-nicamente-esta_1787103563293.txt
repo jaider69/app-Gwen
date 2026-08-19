@@ -1,0 +1,132 @@
+FASE 3 — PRODUCTOS E INVENTARIO
+
+Implementa únicamente esta fase.
+
+OBJETIVO
+
+Crear el sistema funcional de productos e inventario.
+
+IMPORTANTE:
+
+La aplicación NO debe limitarse a 2 o 3 productos.
+
+Cada tienda debe poder registrar todos los productos que necesite.
+
+Los 2 o 3 productos de mayor rotación se seleccionarán posteriormente para la etapa de evaluación del modelo predictivo.
+
+PRODUCTO
+
+Cada producto debe tener:
+
+- ID
+- tienda
+- nombre
+- marca
+- categoría
+- cantidad actual
+- precio de venta
+- stock mínimo
+- fecha de vencimiento
+- fecha de creación
+- fecha de actualización
+
+El proveedor puede ser opcional.
+
+CATEGORÍAS
+
+Crear categorías iniciales:
+
+- Bebidas
+- Snacks
+- Lácteos
+- Granos
+- Enlatados
+- Aseo
+- Dulces
+- Panadería
+- Otros
+
+Permitir posteriormente categorías personalizadas.
+
+CRUD
+
+Implementar:
+
+- crear producto;
+- consultar producto;
+- editar producto;
+- eliminar producto;
+- buscar producto;
+- filtrar productos.
+
+INVENTARIO
+
+Mostrar:
+
+- producto;
+- marca;
+- categoría;
+- stock actual;
+- stock mínimo;
+- precio;
+- vencimiento;
+- estado.
+
+ESTADOS
+
+Normal
+Stock bajo
+Agotado
+Próximo a vencer
+
+STOCK BAJO
+
+Si:
+
+stock actual <= stock mínimo
+
+mostrar alerta de stock bajo.
+
+AGOTADO
+
+Si:
+
+stock actual = 0
+
+mostrar producto como agotado.
+
+VENCIMIENTO
+
+Detectar productos próximos a vencer.
+
+No eliminar automáticamente productos vencidos.
+
+VALIDACIONES
+
+No permitir:
+
+- cantidades negativas;
+- precios negativos;
+- nombres vacíos;
+- productos sin tienda;
+- registros sin usuario válido.
+
+OFFLINE
+
+Las operaciones de productos deben almacenarse primero localmente.
+
+Si existe conexión, sincronizar con Supabase.
+
+Si no existe conexión, guardar localmente y marcar el cambio como pendiente.
+
+IMPORTANTE
+
+Mantener funcionando:
+
+- login;
+- autenticación;
+- aislamiento por tienda.
+
+No implementar todavía ventas ni voz.
+
+Al terminar, ejecutar pruebas completas.

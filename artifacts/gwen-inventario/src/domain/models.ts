@@ -30,12 +30,20 @@ export interface Product extends LocalRecord {
 
 export interface InventoryMovement extends LocalRecord {
   productId: string;
+  userId: string;
+  userName: string;
   quantity: number;
   type: 'entry' | 'sale' | 'adjustment';
+  occurredAt: string;
+  stockBefore: number;
+  stockAfter: number;
   note?: string;
 }
 
 export interface Sale extends LocalRecord {
+  userId: string;
+  userName: string;
+  soldAt: string;
   total: number;
   status: 'draft' | 'completed' | 'cancelled';
 }
@@ -43,6 +51,8 @@ export interface Sale extends LocalRecord {
 export interface SaleItem extends LocalRecord {
   saleId: string;
   productId: string;
+  productName: string;
   quantity: number;
   unitPrice: number;
+  subtotal: number;
 }

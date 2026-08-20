@@ -32,6 +32,9 @@ function RootLayoutNav() {
       <Stack.Screen name="products/index" options={{ headerShown: false }} />
       <Stack.Screen name="products/new" options={{ headerShown: false }} />
       <Stack.Screen name="products/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="entries/new" options={{ headerShown: false }} />
+      <Stack.Screen name="sales/new" options={{ headerShown: false }} />
+      <Stack.Screen name="movements/index" options={{ headerShown: false }} />
     </Stack>
   );
 }

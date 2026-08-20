@@ -319,7 +319,9 @@ export class ProductService {
   }
 
   async sync(storeId: string): Promise<number> {
-    const pending = await this.queue.list(storeId);
+    const pending = (await this.queue.list(storeId)).filter(
+      (item) => item.entity === 'product' || item.entity === 'category',
+    );
     for (const item of pending) {
       try {
         if (item.operation === 'delete') {
@@ -333,7 +335,9 @@ export class ProductService {
         break;
       }
     }
-    if (pending.length === 0 || (await this.queue.list(storeId)).length === 0) {
+    if (pending.length === 0 || (await this.queue.list(storeId)).filter(
+      (item) => item.entity === 'product' || item.entity === 'category',
+    ).length === 0) {
       try {
         const remote = await this.remote.list(storeId);
         const local = await this.list(storeId);

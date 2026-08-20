@@ -3,6 +3,7 @@ import { LocalJsonStore } from '@/src/data/local/localJsonStore';
 export interface AuthSession {
   userId: string;
   storeId: string | null;
+  storeName: string | null;
   email: string | null;
   displayName: string | null;
   accessToken: string;
@@ -109,6 +110,7 @@ export class SupabaseAuthService implements AuthService {
     return {
       ...session,
       storeId: profile?.store_id ?? null,
+      storeName: session.storeName ?? null,
       displayName: profile?.full_name ?? session.displayName,
     };
   }
@@ -122,6 +124,7 @@ export class SupabaseAuthService implements AuthService {
     return {
       userId: user.id,
       storeId: null,
+      storeName: user.user_metadata?.store_name ?? null,
       email: user.email ?? null,
       displayName: user.user_metadata?.full_name ?? null,
       accessToken: session.access_token,

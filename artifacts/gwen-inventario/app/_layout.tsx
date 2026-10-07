@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -15,9 +15,13 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '@/src/presentation/context/AuthContext';
 import { ProductProvider } from '@/src/presentation/context/ProductContext';
+import { loadSeedIfNeeded } from '@/src/data/seed/seedLoader';
+import { applyInterFontGlobally } from '@/src/utils/applyInterFont';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+
+applyInterFontGlobally();
 
 const queryClient = new QueryClient();
 
@@ -27,6 +31,7 @@ function RootLayoutNav() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="dashboard" options={{ headerShown: false }} />
+      <Stack.Screen name="gwen" options={{ headerShown: false }} />
       <Stack.Screen name="profile" options={{ headerShown: false }} />
       <Stack.Screen name="foundation" options={{ headerShown: false }} />
       <Stack.Screen name="products/index" options={{ headerShown: false }} />
@@ -47,13 +52,32 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
+  const [seedReady, setSeedReady] = useState(false);
+
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    let cancelled = false;
+
+    loadSeedIfNeeded()
+      .catch((error: unknown) => {
+        // No bloqueamos el arranque de la app por un fallo del seed de desarrollo.
+        console.warn('No se pudo cargar el seed de desarrollo:', error);
+      })
+      .finally(() => {
+        if (!cancelled) setSeedReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if ((fontsLoaded || fontError) && seedReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsLoaded, fontError, seedReady]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if ((!fontsLoaded && !fontError) || !seedReady) return null;
 
   return (
     <SafeAreaProvider>

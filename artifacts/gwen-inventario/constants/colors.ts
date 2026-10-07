@@ -1,79 +1,82 @@
 /**
  * Semantic design tokens for the mobile app.
  *
- * These tokens mirror the naming conventions used in web artifacts (index.css)
- * so that multi-artifact projects share a cohesive visual identity.
- *
- * Replace the placeholder values below with values that match the project's
- * brand. If a sibling web artifact exists, read its index.css and convert the
- * HSL values to hex so both artifacts use the same palette.
- *
- * To add dark mode, add a `dark` key with the same token names.
- * The useColors() hook will automatically pick it up.
+ * Paleta basada en un azul confiable (#1F5C8C) inspirado en un degradado
+ * marino-a-celeste, elegida por contraste alto y legibilidad para usuarios
+ * con distintos niveles de alfabetización digital (tenderos).
  */
 
 const colors = {
   light: {
-    // Legacy aliases (kept for backward compatibility)
-    text: '#102A43',
-    tint: '#1F9D75',
+    text: '#16283D',
+    tint: '#1F5C8C',
 
-    // Core surfaces
-    background: '#F6F8F5',
-    foreground: '#102A43',
+    background: '#F5F8FB',
+    foreground: '#16283D',
 
-    // Cards / elevated surfaces
     card: '#FFFFFF',
-    cardForeground: '#102A43',
+    cardForeground: '#16283D',
 
-    // Primary action color (buttons, links, active states)
-    primary: '#1F9D75',
-    primaryForeground: '#ffffff',
+    primary: '#1F5C8C',
+    primaryForeground: '#FFFFFF',
 
-    // Secondary / less-emphasis interactive surfaces
-    secondary: '#E5F3ED',
-    secondaryForeground: '#176B52',
+    secondary: '#E4F0F8',
+    secondaryForeground: '#164A73',
 
-    // Muted / subdued elements (dividers, timestamps, placeholders)
-    muted: '#EAF0EC',
-    mutedForeground: '#627D73',
+    muted: '#E7EEF3',
+    mutedForeground: '#5B7184',
 
-    // Accent highlights (badges, selected items, focus rings)
     accent: '#F6C85F',
     accentForeground: '#6B4E00',
 
-    // Destructive actions (delete, error states)
     destructive: '#C94C4C',
-    destructiveForeground: '#ffffff',
+    destructiveForeground: '#FFFFFF',
 
-    // Borders and input outlines
-    border: '#D8E2DC',
-    input: '#D8E2DC',
+    border: '#D7E3EC',
+    input: '#D7E3EC',
   },
 
   dark: {
-    text: '#F4F7F5',
-    tint: '#64D2A8',
-    background: '#102A43',
-    foreground: '#F4F7F5',
-    card: '#173A55',
-    cardForeground: '#F4F7F5',
-    primary: '#64D2A8',
-    primaryForeground: '#102A43',
-    secondary: '#1D4B5C',
-    secondaryForeground: '#C9F2DF',
-    muted: '#1D4056',
-    mutedForeground: '#A9C5B8',
+    text: '#EAF2F8',
+    tint: '#6FB8E6',
+    background: '#0F2436',
+    foreground: '#EAF2F8',
+    card: '#16324A',
+    cardForeground: '#EAF2F8',
+    primary: '#6FB8E6',
+    primaryForeground: '#0F2436',
+    secondary: '#1C4664',
+    secondaryForeground: '#CDE6F7',
+    muted: '#1B3A52',
+    mutedForeground: '#9CBBD1',
     accent: '#F6C85F',
-    accentForeground: '#102A43',
+    accentForeground: '#0F2436',
     destructive: '#F28383',
-    destructiveForeground: '#102A43',
-    border: '#2C5667',
-    input: '#2C5667',
+    destructiveForeground: '#0F2436',
+    border: '#2A4C68',
+    input: '#2A4C68',
   },
 
-  // Border radius (in px). Sync from the sibling web artifact's --radius
-  // CSS variable. This value applies to cards, buttons, inputs, and modals.
+  // Degradado de marca para superficies destacadas (hero del dashboard y de Gwen)
+  gradients: {
+    hero: ['#1B3358', '#4FA3D1'] as [string, string],
+    heroDark: ['#0F2436', '#3D82AE'] as [string, string],
+  },
+    // Fondo de marca fijo (no cambia con modo claro/oscuro), usado solo en el
+  // Dashboard para lograr el look "degradado difuminado" de la imagen de referencia.
+    // Fondo de marca fijo (no cambia con modo claro/oscuro), usado en toda la
+  // app para lograr el look "degradado difuminado" de la imagen de referencia.
+  brand: {
+    gradient: ['#12233A', '#1E4F73', '#3E86AE', '#7BC7E9'] as [string, string, string, string],
+    gradientLocations: [0, 0.35, 0.7, 1] as [number, number, number, number],
+    // Texto y elementos "sueltos" (no dentro de una tarjeta blanca) que van
+    // directamente sobre el degradado.
+    onGradientText: '#FFFFFF',
+    onGradientTextMuted: 'rgba(255,255,255,0.82)',
+    onGradientGlassBg: 'rgba(255,255,255,0.16)',
+    onGradientGlassBorder: 'rgba(255,255,255,0.32)',
+  },
+
   radius: 16,
 };
 

@@ -12,15 +12,18 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppBackground } from '@/components/AppBackground';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
-import { useColors } from '@/hooks/useColors';
+import colors from '@/constants/colors';
 import { useProducts } from '@/src/presentation/context/ProductContext';
 import type { Product } from '@/src/domain/models';
+
+const G = colors.brand;
+const SURFACE = colors.light;
 
 type TransactionMode = 'entry' | 'sale';
 
 export default function TransactionFormScreen({ mode }: { mode: TransactionMode }) {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
@@ -65,7 +68,7 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
 
   const isEntry = mode === 'entry';
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <AppBackground>
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.content,
@@ -81,25 +84,25 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
             accessibilityRole="button"
             accessibilityLabel="Volver al inicio"
             onPress={() => router.back()}
-            style={({ pressed }) => [styles.back, { backgroundColor: colors.secondary, opacity: pressed ? 0.7 : 1 }]}
+            style={({ pressed }) => [styles.back, { backgroundColor: G.onGradientGlassBg, borderColor: G.onGradientGlassBorder, opacity: pressed ? 0.7 : 1 }]}
           >
-            <Feather name="arrow-left" size={20} color={colors.primary} />
+            <Feather name="arrow-left" size={20} color={G.onGradientText} />
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text style={[styles.eyebrow, { color: colors.primary }]}>{isEntry ? 'ENTRADA DE INVENTARIO' : 'NUEVA VENTA'}</Text>
-            <Text style={[styles.title, { color: colors.foreground }]}>{isEntry ? 'Recibir productos' : 'Registrar una venta'}</Text>
+            <Text style={[styles.eyebrow, { color: G.onGradientTextMuted }]}>{isEntry ? 'ENTRADA DE INVENTARIO' : 'NUEVA VENTA'}</Text>
+            <Text style={[styles.title, { color: G.onGradientText }]}>{isEntry ? 'Recibir productos' : 'Registrar una venta'}</Text>
           </View>
         </View>
 
-        <View style={[styles.introCard, { backgroundColor: isEntry ? colors.secondary : colors.primary }]}>
-          <View style={[styles.introIcon, { backgroundColor: isEntry ? colors.primary : colors.primaryForeground }]}>
-            <Feather name={isEntry ? 'arrow-down-left' : 'shopping-bag'} size={20} color={isEntry ? colors.primaryForeground : colors.primary} />
+        <View style={[styles.introCard, { backgroundColor: SURFACE.card }]}>
+          <View style={[styles.introIcon, { backgroundColor: isEntry ? SURFACE.secondary : SURFACE.primary }]}>
+            <Feather name={isEntry ? 'arrow-down-left' : 'shopping-bag'} size={20} color={isEntry ? SURFACE.primary : '#FFFFFF'} />
           </View>
           <View style={styles.introCopy}>
-            <Text style={[styles.introTitle, { color: isEntry ? colors.secondaryForeground : colors.primaryForeground }]}>
+            <Text style={[styles.introTitle, { color: SURFACE.cardForeground }]}>
               {isEntry ? 'Suma existencias sin perder el historial' : 'El precio se toma del producto'}
             </Text>
-            <Text style={[styles.introText, { color: isEntry ? colors.mutedForeground : colors.secondaryForeground }]}>
+            <Text style={[styles.introText, { color: SURFACE.mutedForeground }]}>
               {isEntry
                 ? 'Registra cuántas unidades recibiste y el stock se actualizará automáticamente.'
                 : 'No tienes que escribir el precio. Gwen usa el precio de venta guardado en el catálogo.'}
@@ -108,25 +111,24 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
         </View>
 
         {products.length === 0 && !loading ? (
-          <View style={[styles.empty, { borderColor: colors.border }]}>
-            <Feather name="package" size={25} color={colors.primary} />
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Primero agrega un producto</Text>
-            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Necesitas un producto para registrar {isEntry ? 'una entrada' : 'una venta'}.</Text>
-            <Pressable onPress={() => router.replace('/products/new')} style={[styles.emptyButton, { backgroundColor: colors.primary }]}>
-              <Text style={[styles.emptyButtonText, { color: colors.primaryForeground }]}>Agregar producto</Text>
+          <View style={[styles.empty, { borderColor: G.onGradientGlassBorder }]}>
+            <Feather name="package" size={25} color={G.onGradientText} />
+            <Text style={[styles.emptyTitle, { color: G.onGradientText }]}>Primero agrega un producto</Text>
+            <Text style={[styles.emptyText, { color: G.onGradientTextMuted }]}>Necesitas un producto para registrar {isEntry ? 'una entrada' : 'una venta'}.</Text>
+            <Pressable onPress={() => router.replace('/products/new')} style={[styles.emptyButton, { backgroundColor: SURFACE.primary }]}>
+              <Text style={styles.emptyButtonText}>Agregar producto</Text>
             </Pressable>
           </View>
         ) : (
           <>
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>1. Selecciona el producto</Text>
+              <Text style={[styles.sectionTitle, { color: G.onGradientText }]}>1. Selecciona el producto</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.productPicker}>
                 {products.map((product) => (
                   <ProductOption
                     key={product.id}
                     product={product}
                     selected={product.id === selectedProductId}
-                    colors={colors}
                     onPress={() => setSelectedProductId(product.id)}
                   />
                 ))}
@@ -134,11 +136,11 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
             </View>
 
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>2. Indica la cantidad</Text>
-              <View style={[styles.quantityCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.sectionTitle, { color: G.onGradientText }]}>2. Indica la cantidad</Text>
+              <View style={[styles.quantityCard, { backgroundColor: SURFACE.card }]}>
                 <View style={styles.quantityCopy}>
-                  <Text style={[styles.quantityLabel, { color: colors.mutedForeground }]}>{isEntry ? 'Cantidad recibida' : 'Cantidad a vender'}</Text>
-                  <Text style={[styles.quantityHint, { color: colors.mutedForeground }]}>
+                  <Text style={[styles.quantityLabel, { color: SURFACE.mutedForeground }]}>{isEntry ? 'Cantidad recibida' : 'Cantidad a vender'}</Text>
+                  <Text style={[styles.quantityHint, { color: SURFACE.mutedForeground }]}>
                     {selectedProduct ? `Disponible: ${selectedProduct.stock} ${selectedProduct.unit}` : 'Selecciona un producto'}
                   </Text>
                 </View>
@@ -148,24 +150,24 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
                   onChangeText={updateQuantity}
                   keyboardType="number-pad"
                   placeholder="0"
-                  placeholderTextColor={colors.mutedForeground}
-                  style={[styles.quantityInput, { color: colors.foreground, borderColor: colors.border }]}
+                  placeholderTextColor={SURFACE.mutedForeground}
+                  style={[styles.quantityInput, { color: SURFACE.foreground, backgroundColor: SURFACE.secondary }]}
                 />
               </View>
             </View>
 
-            <View style={[styles.summary, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <SummaryRow label="Producto" value={selectedProduct?.name ?? '—'} colors={colors} />
-              <SummaryRow label="Stock anterior" value={selectedProduct ? `${selectedProduct.stock} ${selectedProduct.unit}` : '—'} colors={colors} />
-              <SummaryRow label={isEntry ? 'Stock nuevo' : 'Stock después de la venta'} value={selectedProduct ? `${isEntry ? selectedProduct.stock + quantity : Math.max(0, selectedProduct.stock - quantity)} ${selectedProduct.unit}` : '—'} colors={colors} emphasis />
-              {!isEntry ? <SummaryRow label="Precio fijo" value={selectedProduct ? formatCurrency(selectedProduct.price) : '—'} colors={colors} /> : null}
-              {!isEntry ? <SummaryRow label="Total de la venta" value={formatCurrency(total)} colors={colors} emphasis /> : null}
+            <View style={[styles.summary, { backgroundColor: SURFACE.card }]}>
+              <SummaryRow label="Producto" value={selectedProduct?.name ?? '—'} />
+              <SummaryRow label="Stock anterior" value={selectedProduct ? `${selectedProduct.stock} ${selectedProduct.unit}` : '—'} />
+              <SummaryRow label={isEntry ? 'Stock nuevo' : 'Stock después de la venta'} value={selectedProduct ? `${isEntry ? selectedProduct.stock + quantity : Math.max(0, selectedProduct.stock - quantity)} ${selectedProduct.unit}` : '—'} emphasis />
+              {!isEntry ? <SummaryRow label="Precio fijo" value={selectedProduct ? formatCurrency(selectedProduct.price) : '—'} /> : null}
+              {!isEntry ? <SummaryRow label="Total de la venta" value={formatCurrency(total)} emphasis /> : null}
             </View>
 
             {error ? (
               <View style={[styles.errorBox, { backgroundColor: '#FCEBEB' }]}>
-                <Feather name="alert-circle" size={17} color={colors.destructive} />
-                <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text>
+                <Feather name="alert-circle" size={17} color={SURFACE.destructive} />
+                <Text style={[styles.errorText, { color: SURFACE.destructive }]}>{error}</Text>
               </View>
             ) : null}
 
@@ -176,28 +178,26 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
               onPress={submit}
               style={({ pressed }) => [
                 styles.submit,
-                { backgroundColor: colors.primary, opacity: saving || !selectedProduct || quantity <= 0 ? 0.45 : pressed ? 0.78 : 1 },
+                { backgroundColor: SURFACE.primary, opacity: saving || !selectedProduct || quantity <= 0 ? 0.45 : pressed ? 0.78 : 1 },
               ]}
             >
-              <Text style={[styles.submitText, { color: colors.primaryForeground }]}>{saving ? 'Guardando…' : isEntry ? 'Confirmar entrada' : 'Confirmar venta'}</Text>
-              <Feather name="check" size={19} color={colors.primaryForeground} />
+              <Text style={styles.submitText}>{saving ? 'Guardando…' : isEntry ? 'Confirmar entrada' : 'Confirmar venta'}</Text>
+              <Feather name="check" size={19} color="#FFFFFF" />
             </Pressable>
           </>
         )}
       </KeyboardAwareScrollViewCompat>
-    </View>
+    </AppBackground>
   );
 }
 
 function ProductOption({
   product,
   selected,
-  colors,
   onPress,
 }: {
   product: Product;
   selected: boolean;
-  colors: ReturnType<typeof useColors>;
   onPress: () => void;
 }) {
   return (
@@ -207,15 +207,12 @@ function ProductOption({
       onPress={onPress}
       style={[
         styles.productOption,
-        {
-          backgroundColor: selected ? colors.primary : colors.card,
-          borderColor: selected ? colors.primary : colors.border,
-        },
+        { backgroundColor: selected ? SURFACE.primary : SURFACE.card },
       ]}
     >
-      <Feather name="package" size={17} color={selected ? colors.primaryForeground : colors.primary} />
-      <Text numberOfLines={1} style={[styles.productOptionName, { color: selected ? colors.primaryForeground : colors.cardForeground }]}>{product.name}</Text>
-      <Text style={[styles.productOptionStock, { color: selected ? colors.secondaryForeground : colors.mutedForeground }]}>{product.stock} disponibles</Text>
+      <Feather name="package" size={17} color={selected ? '#FFFFFF' : SURFACE.primary} />
+      <Text numberOfLines={1} style={[styles.productOptionName, { color: selected ? '#FFFFFF' : SURFACE.cardForeground }]}>{product.name}</Text>
+      <Text style={[styles.productOptionStock, { color: selected ? 'rgba(255,255,255,0.85)' : SURFACE.mutedForeground }]}>{product.stock} disponibles</Text>
     </Pressable>
   );
 }
@@ -223,18 +220,16 @@ function ProductOption({
 function SummaryRow({
   label,
   value,
-  colors,
   emphasis = false,
 }: {
   label: string;
   value: string;
-  colors: ReturnType<typeof useColors>;
   emphasis?: boolean;
 }) {
   return (
     <View style={styles.summaryRow}>
-      <Text style={[styles.summaryLabel, { color: colors.mutedForeground }]}>{label}</Text>
-      <Text style={[styles.summaryValue, { color: emphasis ? colors.primary : colors.cardForeground, fontWeight: emphasis ? '700' : '600' }]}>{value}</Text>
+      <Text style={[styles.summaryLabel, { color: SURFACE.mutedForeground }]}>{label}</Text>
+      <Text style={[styles.summaryValue, { color: emphasis ? SURFACE.primary : SURFACE.cardForeground, fontWeight: emphasis ? '700' : '600' }]}>{value}</Text>
     </View>
   );
 }
@@ -249,10 +244,9 @@ function formatCurrency(value: number): string {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
   content: { paddingHorizontal: 20, gap: 22 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  back: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  back: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1, gap: 2 },
   eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 1.1 },
   title: { fontSize: 25, fontWeight: '700' },
@@ -264,25 +258,25 @@ const styles = StyleSheet.create({
   section: { gap: 11 },
   sectionTitle: { fontSize: 17, fontWeight: '700' },
   productPicker: { gap: 9, paddingVertical: 2 },
-  productOption: { width: 150, minHeight: 105, borderWidth: 1, borderRadius: 17, padding: 12, gap: 7 },
+  productOption: { width: 150, minHeight: 105, borderRadius: 17, padding: 12, gap: 7 },
   productOptionName: { fontSize: 13, fontWeight: '700' },
   productOptionStock: { fontSize: 11 },
-  quantityCard: { minHeight: 84, borderWidth: 1, borderRadius: 18, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  quantityCard: { minHeight: 84, borderRadius: 18, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10 },
   quantityCopy: { flex: 1, gap: 4 },
   quantityLabel: { fontSize: 13, fontWeight: '700' },
   quantityHint: { fontSize: 11 },
-  quantityInput: { width: 82, height: 56, borderWidth: 1, borderRadius: 15, fontSize: 24, fontWeight: '700', textAlign: 'center' },
-  summary: { borderWidth: 1, borderRadius: 18, padding: 15, gap: 13 },
+  quantityInput: { width: 82, height: 56, borderRadius: 15, fontSize: 24, fontWeight: '700', textAlign: 'center' },
+  summary: { borderRadius: 18, padding: 15, gap: 13 },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   summaryLabel: { fontSize: 13 },
   summaryValue: { fontSize: 13, maxWidth: '62%', textAlign: 'right' },
   errorBox: { borderRadius: 14, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 9 },
   errorText: { flex: 1, fontSize: 13, lineHeight: 18 },
   submit: { minHeight: 55, borderRadius: 17, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  submitText: { fontSize: 15, fontWeight: '700' },
+  submitText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   empty: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 20, padding: 24, alignItems: 'center', gap: 10 },
   emptyTitle: { fontSize: 17, fontWeight: '700', textAlign: 'center' },
   emptyText: { fontSize: 13, lineHeight: 19, textAlign: 'center' },
   emptyButton: { borderRadius: 14, paddingHorizontal: 16, paddingVertical: 11, marginTop: 4 },
-  emptyButtonText: { fontSize: 13, fontWeight: '700' },
+  emptyButtonText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
 });

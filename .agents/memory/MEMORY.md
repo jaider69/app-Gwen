@@ -1,1 +1,2 @@
 - [Expo Router directory routes](expo-router-directory-routes.md) — Stack entries for folder indexes must use the explicit `folder/index` route name.
+- [Expo package installation](expo-package-installation.md) — In the monorepo, Expo dependencies must be added to the mobile artifact package, not the workspace root.

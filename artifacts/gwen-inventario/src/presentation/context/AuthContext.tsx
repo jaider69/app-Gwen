@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type PropsWith
 
 import {
   SupabaseAuthService,
+  MockAuthService,
   type AuthSession,
   type SignUpInput,
 } from '@/src/services/auth/authService';
@@ -17,7 +18,13 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const authService = new SupabaseAuthService();
+
+// Detecta automáticamente si Supabase está configurado
+const isSupabaseConfigured = Boolean(
+  process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+);
+
+const authService = isSupabaseConfigured ? new SupabaseAuthService() : new MockAuthService();
 
 function readableError(error: unknown): string {
   return error instanceof Error ? error.message : 'Ocurrió un error inesperado.';

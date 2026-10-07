@@ -12,11 +12,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppBackground } from '@/components/AppBackground';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
-import { useColors } from '@/hooks/useColors';
+import colors from '@/constants/colors';
 import type { Product } from '@/src/domain/models';
 import { useProducts } from '@/src/presentation/context/ProductContext';
 import type { ProductDraft } from '@/src/services/products/productService';
+
+const G = colors.brand;
+const SURFACE = colors.light;
 
 const EMPTY_DRAFT: ProductDraft = {
   name: '',
@@ -31,7 +35,6 @@ const EMPTY_DRAFT: ProductDraft = {
 };
 
 export default function ProductFormScreen({ productId }: { productId?: string }) {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
@@ -67,6 +70,14 @@ export default function ProductFormScreen({ productId }: { productId?: string })
     if (error) clearError();
   }
 
+  function formatDateInput(value: string): string {
+    const digits = value.replace(/\D/g, '').slice(0, 8);
+    const year = digits.slice(0, 4);
+    const month = digits.slice(4, 6);
+    const day = digits.slice(6, 8);
+    return [year, month, day].filter(Boolean).join('-');
+  }
+
   async function submit() {
     try {
       if (isEditing && productId) {
@@ -92,26 +103,30 @@ export default function ProductFormScreen({ productId }: { productId?: string })
 
   if (isEditing && loading && !product) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <Text style={[styles.centerText, { color: colors.mutedForeground }]}>Cargando producto…</Text>
-      </View>
+      <AppBackground>
+        <View style={styles.center}>
+          <Text style={[styles.centerText, { color: G.onGradientTextMuted }]}>Cargando producto…</Text>
+        </View>
+      </AppBackground>
     );
   }
 
   if (isEditing && !product && !loading) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <Feather name="alert-circle" size={28} color={colors.destructive} />
-        <Text style={[styles.centerTitle, { color: colors.foreground }]}>Producto no encontrado</Text>
-        <Pressable onPress={() => router.replace('/products')} style={[styles.centerButton, { backgroundColor: colors.primary }]}>
-          <Text style={[styles.centerButtonText, { color: colors.primaryForeground }]}>Volver al inventario</Text>
-        </Pressable>
-      </View>
+      <AppBackground>
+        <View style={styles.center}>
+          <Feather name="alert-circle" size={28} color="#F28383" />
+          <Text style={[styles.centerTitle, { color: G.onGradientText }]}>Producto no encontrado</Text>
+          <Pressable onPress={() => router.replace('/products')} style={[styles.centerButton, { backgroundColor: SURFACE.primary }]}>
+            <Text style={styles.centerButtonText}>Volver al inventario</Text>
+          </Pressable>
+        </View>
+      </AppBackground>
     );
   }
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <AppBackground>
       <KeyboardAwareScrollViewCompat
         contentContainerStyle={[
           styles.content,
@@ -127,26 +142,26 @@ export default function ProductFormScreen({ productId }: { productId?: string })
             accessibilityRole="button"
             accessibilityLabel="Volver al inventario"
             onPress={() => router.back()}
-            style={({ pressed }) => [styles.back, { backgroundColor: colors.secondary, opacity: pressed ? 0.7 : 1 }]}
+            style={({ pressed }) => [styles.back, { backgroundColor: G.onGradientGlassBg, borderColor: G.onGradientGlassBorder, opacity: pressed ? 0.75 : 1 }]}
           >
-            <Feather name="arrow-left" size={20} color={colors.primary} />
+            <Feather name="arrow-left" size={20} color={G.onGradientText} />
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text style={[styles.eyebrow, { color: colors.primary }]}>{isEditing ? 'EDITAR PRODUCTO' : 'NUEVO PRODUCTO'}</Text>
-            <Text style={[styles.title, { color: colors.foreground }]}>{isEditing ? 'Actualiza los datos' : 'Agrega un producto'}</Text>
+            <Text style={[styles.eyebrow, { color: G.onGradientTextMuted }]}>{isEditing ? 'EDITAR PRODUCTO' : 'NUEVO PRODUCTO'}</Text>
+            <Text style={[styles.title, { color: G.onGradientText }]}>{isEditing ? 'Actualiza los datos' : 'Agrega un producto'}</Text>
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Información básica</Text>
-          <Field label="Nombre del producto *" value={draft.name} onChangeText={(value) => updateField('name', value)} placeholder="Ej. Arroz blanco 500 g" colors={colors} />
-          <Field label="Marca" value={draft.brand} onChangeText={(value) => updateField('brand', value)} placeholder="Ej. Diana" colors={colors} />
-          <Field label="Proveedor (opcional)" value={draft.supplier ?? ''} onChangeText={(value) => updateField('supplier', value)} placeholder="Ej. Distribuciones La 14" colors={colors} />
-          <Field label="Unidad de venta" value={draft.unit} onChangeText={(value) => updateField('unit', value)} placeholder="unidad, bolsa, caja…" colors={colors} />
+        <View style={[styles.sectionCard, { backgroundColor: SURFACE.card }]}>
+          <Text style={[styles.sectionTitle, { color: SURFACE.cardForeground }]}>Información básica</Text>
+          <Field label="Nombre del producto *" value={draft.name} onChangeText={(value) => updateField('name', value)} placeholder="Ej. Arroz blanco 500 g" />
+          <Field label="Marca" value={draft.brand} onChangeText={(value) => updateField('brand', value)} placeholder="Ej. Diana" />
+          <Field label="Proveedor (opcional)" value={draft.supplier ?? ''} onChangeText={(value) => updateField('supplier', value)} placeholder="Ej. Distribuciones La 14" />
+          <Field label="Unidad de venta" value={draft.unit} onChangeText={(value) => updateField('unit', value)} placeholder="unidad, bolsa, caja…" />
         </View>
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Categoría</Text>
+        <View style={[styles.sectionCard, { backgroundColor: SURFACE.card }]}>
+          <Text style={[styles.sectionTitle, { color: SURFACE.cardForeground }]}>Categoría</Text>
           <View style={styles.categoryGrid}>
             {categories.map((category) => (
               <Pressable
@@ -157,12 +172,11 @@ export default function ProductFormScreen({ productId }: { productId?: string })
                 style={[
                   styles.categoryOption,
                   {
-                    backgroundColor: draft.categoryId === category.id ? colors.primary : colors.card,
-                    borderColor: draft.categoryId === category.id ? colors.primary : colors.border,
+                    backgroundColor: draft.categoryId === category.id ? SURFACE.primary : SURFACE.secondary,
                   },
                 ]}
               >
-                <Text style={[styles.categoryOptionText, { color: draft.categoryId === category.id ? colors.primaryForeground : colors.cardForeground }]}>
+                <Text style={[styles.categoryOptionText, { color: draft.categoryId === category.id ? '#FFFFFF' : SURFACE.secondaryForeground }]}>
                   {category.name}
                 </Text>
               </Pressable>
@@ -174,36 +188,36 @@ export default function ProductFormScreen({ productId }: { productId?: string })
               value={newCategory}
               onChangeText={setNewCategory}
               placeholder="Crear categoría personalizada"
-              placeholderTextColor={colors.mutedForeground}
-              style={[styles.newCategoryInput, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground }]}
+              placeholderTextColor={SURFACE.mutedForeground}
+              style={[styles.newCategoryInput, { backgroundColor: SURFACE.secondary, color: SURFACE.foreground }]}
             />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Crear categoría"
               disabled={!newCategory.trim() || saving}
               onPress={addCategory}
-              style={({ pressed }) => [styles.addCategoryButton, { backgroundColor: colors.secondary, opacity: !newCategory.trim() || saving ? 0.45 : pressed ? 0.7 : 1 }]}
+              style={({ pressed }) => [styles.addCategoryButton, { backgroundColor: SURFACE.secondary, opacity: !newCategory.trim() || saving ? 0.45 : pressed ? 0.7 : 1 }]}
             >
-              <Feather name="plus" size={19} color={colors.primary} />
+              <Feather name="plus" size={19} color={SURFACE.primary} />
             </Pressable>
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Existencias y precio</Text>
+        <View style={[styles.sectionCard, { backgroundColor: SURFACE.card }]}>
+          <Text style={[styles.sectionTitle, { color: SURFACE.cardForeground }]}>Existencias y precio</Text>
           <View style={styles.twoColumns}>
-            <Field label="Stock actual *" value={String(draft.stock)} onChangeText={(value) => updateField('stock', numberValue(value))} keyboardType="numeric" colors={colors} />
-            <Field label="Stock mínimo *" value={String(draft.minimumStock)} onChangeText={(value) => updateField('minimumStock', numberValue(value))} keyboardType="numeric" colors={colors} />
+            <Field label="Stock actual *" value={String(draft.stock)} onChangeText={(value) => updateField('stock', numberValue(value))} keyboardType="numeric" />
+            <Field label="Stock mínimo *" value={String(draft.minimumStock)} onChangeText={(value) => updateField('minimumStock', numberValue(value))} keyboardType="numeric" />
           </View>
-          <Field label="Precio de venta *" value={String(draft.price)} onChangeText={(value) => updateField('price', numberValue(value))} keyboardType="numeric" colors={colors} />
-          <Field label="Fecha de vencimiento" value={draft.expiresAt ?? ''} onChangeText={(value) => updateField('expiresAt', value)} placeholder="AAAA-MM-DD" keyboardType="numbers-and-punctuation" colors={colors} />
-          <Text style={[styles.helper, { color: colors.mutedForeground }]}>Los productos vencidos no se eliminan automáticamente. Puedes seguir gestionándolos desde el inventario.</Text>
+          <Field label="Precio de venta *" value={String(draft.price)} onChangeText={(value) => updateField('price', numberValue(value))} keyboardType="numeric" />
+          <Field label="Fecha de vencimiento" value={draft.expiresAt ?? ''} onChangeText={(value) => updateField('expiresAt', formatDateInput(value))} placeholder="AAAA-MM-DD" keyboardType="number-pad" />
+          <Text style={[styles.helper, { color: SURFACE.mutedForeground }]}>Los productos vencidos no se eliminan automáticamente. Puedes seguir gestionándolos desde el inventario.</Text>
         </View>
 
         {error ? (
           <View style={[styles.errorBox, { backgroundColor: '#FCEBEB' }]}>
-            <Feather name="alert-circle" size={17} color={colors.destructive} />
-            <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text>
+            <Feather name="alert-circle" size={17} color={SURFACE.destructive} />
+            <Text style={[styles.errorText, { color: SURFACE.destructive }]}>{error}</Text>
           </View>
         ) : null}
 
@@ -212,27 +226,19 @@ export default function ProductFormScreen({ productId }: { productId?: string })
           accessibilityLabel={isEditing ? 'Guardar cambios' : 'Guardar producto'}
           disabled={saving}
           onPress={submit}
-          style={({ pressed }) => [styles.submit, { backgroundColor: colors.primary, opacity: saving ? 0.45 : pressed ? 0.78 : 1 }]}
+          style={({ pressed }) => [styles.submit, { backgroundColor: SURFACE.primary, opacity: saving ? 0.45 : pressed ? 0.78 : 1 }]}
         >
-          <Text style={[styles.submitText, { color: colors.primaryForeground }]}>{saving ? 'Guardando…' : isEditing ? 'Guardar cambios' : 'Guardar producto'}</Text>
-          <Feather name="check" size={19} color={colors.primaryForeground} />
+          <Text style={styles.submitText}>{saving ? 'Guardando…' : isEditing ? 'Guardar cambios' : 'Guardar producto'}</Text>
+          <Feather name="check" size={19} color="#FFFFFF" />
         </Pressable>
 
-        {isEditing && product ? <DeleteButton product={product} onDeleted={() => router.replace('/products')} colors={colors} /> : null}
+        {isEditing && product ? <DeleteButton product={product} onDeleted={() => router.replace('/products')} /> : null}
       </KeyboardAwareScrollViewCompat>
-    </View>
+    </AppBackground>
   );
 }
 
-function DeleteButton({
-  product,
-  onDeleted,
-  colors,
-}: {
-  product: Product;
-  onDeleted: () => void;
-  colors: ReturnType<typeof useColors>;
-}) {
+function DeleteButton({ product, onDeleted }: { product: Product; onDeleted: () => void }) {
   const { deleteProduct, saving } = useProducts();
   function confirmDelete() {
     Alert.alert('Eliminar producto', `¿Quieres eliminar ${product.name}?`, [
@@ -253,10 +259,10 @@ function DeleteButton({
       accessibilityLabel="Eliminar producto"
       disabled={saving}
       onPress={confirmDelete}
-      style={({ pressed }) => [styles.deleteButton, { borderColor: colors.border, opacity: pressed ? 0.7 : saving ? 0.45 : 1 }]}
+      style={({ pressed }) => [styles.deleteButton, { backgroundColor: G.onGradientGlassBg, borderColor: G.onGradientGlassBorder, opacity: pressed ? 0.7 : saving ? 0.45 : 1 }]}
     >
-      <Feather name="trash-2" size={17} color={colors.destructive} />
-      <Text style={[styles.deleteText, { color: colors.destructive }]}>Eliminar producto</Text>
+      <Feather name="trash-2" size={17} color="#FF9D9D" />
+      <Text style={styles.deleteText}>Eliminar producto</Text>
     </Pressable>
   );
 }
@@ -267,26 +273,24 @@ function Field({
   onChangeText,
   placeholder,
   keyboardType = 'default',
-  colors,
 }: {
   label: string;
   value: string;
   onChangeText: (value: string) => void;
   placeholder?: string;
   keyboardType?: ComponentProps<typeof TextInput>['keyboardType'];
-  colors: ReturnType<typeof useColors>;
 }) {
   return (
     <View style={styles.field}>
-      <Text style={[styles.label, { color: colors.mutedForeground }]}>{label}</Text>
+      <Text style={[styles.label, { color: SURFACE.mutedForeground }]}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.mutedForeground}
+        placeholderTextColor={SURFACE.mutedForeground}
         keyboardType={keyboardType}
-        style={[styles.input, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
+        style={[styles.input, { backgroundColor: SURFACE.secondary, color: SURFACE.foreground }]}
       />
     </View>
   );
@@ -313,35 +317,34 @@ function toDraft(product: Product): ProductDraft {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  content: { paddingHorizontal: 20, gap: 22 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  back: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  content: { paddingHorizontal: 20, gap: 16 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
+  back: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1, gap: 2 },
   eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 1.1 },
   title: { fontSize: 25, fontWeight: '700' },
-  section: { gap: 13 },
+  sectionCard: { borderRadius: 20, padding: 16, gap: 13 },
   sectionTitle: { fontSize: 17, fontWeight: '700' },
   field: { gap: 7 },
   label: { fontSize: 12, fontWeight: '600' },
-  input: { minHeight: 49, borderWidth: 1, borderRadius: 15, paddingHorizontal: 14, fontSize: 14 },
+  input: { minHeight: 49, borderRadius: 15, paddingHorizontal: 14, fontSize: 14 },
   twoColumns: { flexDirection: 'row', gap: 10 },
   helper: { fontSize: 12, lineHeight: 18 },
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  categoryOption: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 11, paddingVertical: 9 },
+  categoryOption: { borderRadius: 14, paddingHorizontal: 11, paddingVertical: 9 },
   categoryOptionText: { fontSize: 12, fontWeight: '600' },
   newCategoryRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  newCategoryInput: { flex: 1, minHeight: 46, borderWidth: 1, borderRadius: 14, paddingHorizontal: 13, fontSize: 13 },
+  newCategoryInput: { flex: 1, minHeight: 46, borderRadius: 14, paddingHorizontal: 13, fontSize: 13 },
   addCategoryButton: { width: 46, height: 46, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   errorBox: { borderRadius: 14, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 9 },
   errorText: { flex: 1, fontSize: 13, lineHeight: 18 },
   submit: { minHeight: 55, borderRadius: 17, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  submitText: { fontSize: 15, fontWeight: '700' },
+  submitText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   deleteButton: { minHeight: 50, borderWidth: 1, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  deleteText: { fontSize: 14, fontWeight: '700' },
+  deleteText: { fontSize: 14, fontWeight: '700', color: '#FF9D9D' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
   centerText: { fontSize: 15 },
   centerTitle: { fontSize: 20, fontWeight: '700' },
   centerButton: { borderRadius: 14, paddingHorizontal: 17, paddingVertical: 12, marginTop: 5 },
-  centerButtonText: { fontSize: 13, fontWeight: '700' },
+  centerButtonText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
 });

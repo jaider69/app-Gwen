@@ -212,3 +212,122 @@ export class UnconfiguredAuthService implements AuthService {
     // No local account is created when Supabase is not configured.
   }
 }
+
+/**
+ * Mock Auth Service para desarrollo sin base de datos real.
+ * Simula autenticación con usuarios en memoria/AsyncStorage.
+ */
+export class MockAuthService implements AuthService {
+  private readonly storage = new LocalJsonStore();
+  private readonly SESSION_KEY = 'mock-auth-session';
+  private readonly USERS_KEY = 'mock-auth-users';
+
+  private async getUsers(): Promise<Record<string, { password: string; displayName: string; storeName: string }>> {
+    const users = await this.storage.get<Record<string, { password: string; displayName: string; storeName: string }>>(this.USERS_KEY);
+    return users ?? {};
+  }
+
+  private async setUsers(users: Record<string, { password: string; displayName: string; storeName: string }>): Promise<void> {
+    await this.storage.set(this.USERS_KEY, users);
+  }
+
+  private generateUserId(): string {
+    return `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  private generateStoreId(): string {
+    return `store_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  private generateAccessToken(): string {
+    return `mock_token_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+  }
+
+  private buildSession(userId: string, email: string, displayName: string, storeName: string, storeId: string): AuthSession {
+    return {
+      userId,
+      storeId,
+      storeName,
+      email,
+      displayName,
+      accessToken: this.generateAccessToken(),
+      refreshToken: `mock_refresh_${Date.now()}`,
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 días
+    };
+  }
+
+  async getSession(): Promise<AuthSession | null> {
+    const session = await this.storage.get<AuthSession>(this.SESSION_KEY);
+    if (!session) return null;
+    if (session.expiresAt && session.expiresAt <= Date.now()) {
+      await this.clearSession();
+      return null;
+    }
+    return session;
+  }
+
+  async signIn(email: string, password: string): Promise<AuthSession> {
+    const users = await this.getUsers();
+    const user = users[email.toLowerCase()];
+
+    if (!user || user.password !== password) {
+      throw new Error('Credenciales inválidas. Verifica tu email y contraseña.');
+    }
+
+    const session = this.buildSession(
+      `user_${email}`,
+      email,
+      user.displayName,
+      user.storeName,
+      `store_${email}`
+    );
+
+    await this.storage.set(this.SESSION_KEY, session);
+    return session;
+  }
+
+  async signUp(input: SignUpInput): Promise<{ session: AuthSession | null; needsEmailConfirmation: boolean }> {
+    const users = await this.getUsers();
+    const normalizedEmail = input.email.toLowerCase();
+
+    if (users[normalizedEmail]) {
+      throw new Error('Ya existe una cuenta con este email.');
+    }
+
+    const userId = this.generateUserId();
+    const storeId = this.generateStoreId();
+
+    users[normalizedEmail] = {
+      password: input.password,
+      displayName: input.displayName,
+      storeName: input.storeName,
+    };
+    await this.setUsers(users);
+
+    const session = this.buildSession(userId, input.email, input.displayName, input.storeName, storeId);
+    await this.storage.set(this.SESSION_KEY, session);
+
+    return { session, needsEmailConfirmation: false };
+  }
+
+  async clearSession(): Promise<void> {
+    await this.storage.remove(this.SESSION_KEY);
+  }
+
+  // Métodos de utilidad para testing/desarrollo
+  async createMockUser(email: string, password: string, displayName: string, storeName: string): Promise<void> {
+    const users = await this.getUsers();
+    users[email.toLowerCase()] = { password, displayName, storeName };
+    await this.setUsers(users);
+  }
+
+  async listMockUsers(): Promise<string[]> {
+    const users = await this.getUsers();
+    return Object.keys(users);
+  }
+
+  async resetMockData(): Promise<void> {
+    await this.storage.remove(this.USERS_KEY);
+    await this.storage.remove(this.SESSION_KEY);
+  }
+}

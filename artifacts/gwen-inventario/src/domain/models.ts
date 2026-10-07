@@ -26,6 +26,7 @@ export interface Product extends LocalRecord {
   price: number;
   minimumStock: number;
   expiresAt?: string;
+  image?: string;
 }
 
 export interface InventoryMovement extends LocalRecord {

@@ -3,7 +3,6 @@ import { LOCAL_TABLES } from '@/src/data/database/schema';
 import { LocalJsonRepository } from '@/src/data/repositories/localJsonRepository';
 import { SyncQueue } from '@/src/data/sync/syncQueue';
 import type { Category, Product } from '@/src/domain/models';
-import type { SyncQueueItem } from '@/src/domain/foundation';
 
 export const DEFAULT_CATEGORIES = [
   'Bebidas',
@@ -89,84 +88,166 @@ export function getProductHealth(product: Product, now = Date.now()): ProductHea
   return { status, lowStock, outOfStock, expiring, expired };
 }
 
+
 class SupabaseProductGateway {
   constructor(private readonly getSession: () => Promise<AuthSession | null>) {}
 
-  private async request(path: string, init: RequestInit = {}): Promise<unknown> {
+  private async request(path: string): Promise<unknown[]> {
     const session = await this.getSession();
-    const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
+    const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '');
     const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
     if (!session?.accessToken || !url || !anonKey) {
-      throw new Error('Supabase no está configurado para sincronizar productos.');
+      throw new Error(
+        'No hay una sesión autenticada o falta la configuración de Supabase.',
+      );
     }
+
     const response = await fetch(`${url}${path}`, {
-      ...init,
+      method: 'GET',
       headers: {
         apikey: anonKey,
         Authorization: `Bearer ${session.accessToken}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal',
-        ...init.headers,
+        Accept: 'application/json',
       },
     });
+
     if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as { message?: string; hint?: string } | null;
-      throw new Error(payload?.message ?? payload?.hint ?? 'No fue posible sincronizar el inventario.');
+      const body = await response.text();
+      let message = body;
+
+      try {
+        const payload = JSON.parse(body) as {
+          message?: string;
+          details?: string;
+          hint?: string;
+          code?: string;
+        };
+
+        message = [
+          payload.message,
+          payload.details,
+          payload.hint,
+          payload.code ? `Código: ${payload.code}` : undefined,
+        ]
+          .filter(Boolean)
+          .join(' | ');
+      } catch {
+        // Conserva el texto original si la respuesta no es JSON.
+      }
+
+      throw new Error(
+        `Error de Supabase (${response.status}): ${
+          message || 'No fue posible consultar los datos.'
+        }`,
+      );
     }
-    return response.status === 204 ? null : response.json().catch(() => null);
+
+    const data: unknown = await response.json();
+
+    if (!Array.isArray(data)) {
+      throw new Error('Supabase devolvió una respuesta inesperada.');
+    }
+
+    return data;
   }
 
-  async upsert(entity: string, payload: Record<string, unknown>): Promise<void> {
-    const table = entity === 'category' ? 'categories' : 'products';
-    await this.request(`/rest/v1/${table}?on_conflict=id`, {
-      method: 'POST',
-      headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(payload),
-    });
-  }
+  async list(
+    storeId: string,
+  ): Promise<{ categories: Category[]; products: Product[] }> {
+    if (!storeId) {
+      throw new Error('No se encontró la tienda de la sesión.');
+    }
 
-  async remove(entity: string, id: string): Promise<void> {
-    const table = entity === 'category' ? 'categories' : 'products';
-    await this.request(`/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
-  }
+    const encodedStoreId = encodeURIComponent(storeId);
 
-  async list(storeId: string): Promise<{ categories: Category[]; products: Product[] }> {
-    const [remoteCategories, remoteProducts] = await Promise.all([
-      this.request(`/rest/v1/categories?store_id=eq.${encodeURIComponent(storeId)}&select=*`) as Promise<unknown[]>,
-      this.request(`/rest/v1/products?store_id=eq.${encodeURIComponent(storeId)}&select=*`) as Promise<unknown[]>,
+    const [categoryRows, productRows, inventoryRows] = await Promise.all([
+      this.request(
+        '/rest/v1/categorias?select=id_categoria,nombre',
+      ),
+      this.request(
+        '/rest/v1/productos?activo=eq.true&select=id_producto,id_categoria,nombre,unidad_medida,precio_referencia,activo',
+      ),
+      this.request(
+        `/rest/v1/inventario?id_tienda=eq.${encodedStoreId}&select=id_tienda,id_producto,stock_actual,stock_minimo,actualizado_en`,
+      ),
     ]);
-    return {
-      categories: remoteCategories.map((item) => {
-        const row = item as Record<string, unknown>;
-        return {
-          id: String(row.id),
-          storeId: String(row.store_id),
-          name: String(row.name),
-          createdAt: String(row.created_at),
-          updatedAt: String(row.updated_at),
-        };
-      }),
-      products: remoteProducts.map((item) => {
-        const row = item as Record<string, unknown>;
-        return {
-          id: String(row.id),
-          storeId: String(row.store_id),
-          name: String(row.name),
-          brand: String(row.brand ?? ''),
-          categoryId: String(row.category_id),
-          supplier: row.supplier ? String(row.supplier) : undefined,
-          unit: String(row.unit ?? 'unidad'),
-          stock: Number(row.stock ?? 0),
-          price: Number(row.price ?? 0),
-          minimumStock: Number(row.minimum_stock ?? 0),
-          expiresAt: row.expires_at ? String(row.expires_at) : undefined,
-          createdAt: String(row.created_at),
-          updatedAt: String(row.updated_at),
-        };
-      }),
+
+    type CategoryRow = {
+      id_categoria: string;
+      nombre: string;
     };
+
+    type ProductRow = {
+      id_producto: string;
+      id_categoria: string | null;
+      nombre: string;
+      unidad_medida: string | null;
+      precio_referencia: number | string | null;
+      activo: boolean;
+    };
+
+    type InventoryRow = {
+      id_tienda: string;
+      id_producto: string;
+      stock_actual: number | string | null;
+      stock_minimo: number | string | null;
+      actualizado_en: string | null;
+    };
+
+    const remoteCategories = categoryRows as CategoryRow[];
+    const remoteProducts = productRows as ProductRow[];
+    const remoteInventory = inventoryRows as InventoryRow[];
+
+    const inventoryByProduct = new Map(
+      remoteInventory.map((row) => [row.id_producto, row]),
+    );
+
+    // Las categorías de Supabase no tienen tienda ni fechas.
+    // Estos valores solo completan los metadatos del modelo local.
+    const categoryTimestamp = '1970-01-01T00:00:00.000Z';
+
+    const categories: Category[] = remoteCategories.map((row) => ({
+      id: row.id_categoria,
+      storeId,
+      name: row.nombre,
+      createdAt: categoryTimestamp,
+      updatedAt: categoryTimestamp,
+    }));
+
+    const products: Product[] = remoteProducts.flatMap((row) => {
+      const inventory = inventoryByProduct.get(row.id_producto);
+
+      // Un producto sin fila de inventario para esta tienda
+      // no debe mostrarse como si tuviera stock conocido.
+      if (!inventory || inventory.id_tienda !== storeId) {
+        return [];
+      }
+
+      const updatedAt =
+        inventory.actualizado_en ?? categoryTimestamp;
+
+      return [
+        {
+          id: row.id_producto,
+          storeId,
+          name: row.nombre,
+          brand: '',
+          categoryId: row.id_categoria ?? '',
+          unit: row.unidad_medida || 'unidad',
+          stock: Number(inventory.stock_actual ?? 0),
+          price: Number(row.precio_referencia ?? 0),
+          minimumStock: Number(inventory.stock_minimo ?? 0),
+          createdAt: updatedAt,
+          updatedAt,
+        },
+      ];
+    });
+
+    return { categories, products };
   }
 }
+
 
 function productPayload(product: Product): Record<string, unknown> {
   return {
@@ -196,10 +277,6 @@ function categoryPayload(category: Category): Record<string, unknown> {
   };
 }
 
-function fromQueue(item: SyncQueueItem): { entity: string; payload: Record<string, unknown> } {
-  return { entity: item.entity, payload: item.payload };
-}
-
 export class ProductService {
   private readonly products = new LocalJsonRepository<Product>(LOCAL_TABLES.products);
   private readonly categories = new LocalJsonRepository<Category>(LOCAL_TABLES.categories);
@@ -210,31 +287,118 @@ export class ProductService {
     this.remote = new SupabaseProductGateway(getSession);
   }
 
-  async list(storeId: string): Promise<{ products: Product[]; categories: Category[] }> {
-    let categories = await this.categories.list(storeId);
-    if (categories.length === 0) {
-      const now = new Date().toISOString();
-      categories = DEFAULT_CATEGORIES.map((name) => ({
-        id: createLocalUuid(),
-        storeId,
-        name,
-        createdAt: now,
-        updatedAt: now,
-      }));
-      for (const category of categories) {
+  
+  async list(
+    storeId: string,
+  ): Promise<{ products: Product[]; categories: Category[] }> {
+    if (!storeId) {
+      throw new Error('No se encontró una tienda para cargar el inventario.');
+    }
+
+    // La lectura remota es obligatoria: no ocultamos sus errores.
+    const remote = await this.remote.list(storeId);
+
+    const [localCategories, localProducts, pending] = await Promise.all([
+      this.categories.list(storeId),
+      this.products.list(storeId),
+      this.queue.list(storeId),
+    ]);
+
+    const pendingItems = pending.filter(
+      (item) => item.entity === 'product' || item.entity === 'category',
+    );
+
+    const pendingSaleTransactions = pending.filter(
+      (item) => item.entity === 'sale_transaction',
+    );
+
+    const pendingSaleProductIds = new Set(
+      pendingSaleTransactions
+        .map((item) => String(item.payload.productId ?? ''))
+        .filter(Boolean),
+    );
+
+    const pendingIds = new Set(pendingItems.map((item) => item.entityId));
+
+    const deletedProductIds = new Set(
+      pendingItems
+        .filter((item) => item.entity === 'product' && item.operation === 'delete')
+        .map((item) => item.entityId),
+    );
+
+    const deletedCategoryIds = new Set(
+      pendingItems
+        .filter((item) => item.entity === 'category' && item.operation === 'delete')
+        .map((item) => item.entityId),
+    );
+
+    const localProductById = new Map(
+      localProducts.map((product) => [product.id, product]),
+    );
+
+    const localCategoryById = new Map(
+      localCategories.map((category) => [category.id, category]),
+    );
+
+    // Actualiza la caché local con los datos remotos,
+    // excepto los registros que tengan cambios pendientes.
+    for (const category of remote.categories) {
+      if (!pendingIds.has(category.id)) {
         await this.categories.save(category);
-        await this.queue.enqueue({
-          storeId,
-          entity: 'category',
-          entityId: category.id,
-          operation: 'create',
-          payload: categoryPayload(category),
-        });
       }
     }
-    const products = await this.products.list(storeId);
-    return { products, categories };
+
+    for (const product of remote.products) {
+      if (
+        !pendingIds.has(product.id) &&
+        !pendingSaleProductIds.has(product.id)
+      ) {
+        await this.products.save(product);
+      }
+    }
+
+    const categoriesById = new Map(
+      remote.categories.map((category) => [category.id, category]),
+    );
+
+    const productsById = new Map(
+      remote.products.map((product) => [product.id, product]),
+    );
+
+    for (const productId of pendingSaleProductIds) {
+      const local = localProductById.get(productId);
+
+      if (local) {
+        productsById.set(local.id, local);
+      }
+    }
+
+    // Conserva categorías y productos locales solo si tienen
+    // operaciones pendientes de sincronización.
+    for (const item of pendingItems) {
+      if (item.operation === 'delete') continue;
+
+      if (item.entity === 'category') {
+        const local = localCategoryById.get(item.entityId);
+        if (local) categoriesById.set(local.id, local);
+      }
+
+      if (item.entity === 'product') {
+        const local = localProductById.get(item.entityId);
+        if (local) productsById.set(local.id, local);
+      }
+    }
+
+    return {
+      categories: [...categoriesById.values()].filter(
+        (category) => !deletedCategoryIds.has(category.id),
+      ),
+      products: [...productsById.values()].filter(
+        (product) => !deletedProductIds.has(product.id),
+      ),
+    };
   }
+
 
   async get(storeId: string, id: string): Promise<Product | null> {
     return this.products.get(storeId, id);
@@ -318,48 +482,16 @@ export class ProductService {
     return (await this.queue.list(storeId)).length;
   }
 
+  
   async sync(storeId: string): Promise<number> {
-    const pending = (await this.queue.list(storeId)).filter(
-      (item) => item.entity === 'product' || item.entity === 'category',
-    );
-    for (const item of pending) {
-      try {
-        if (item.operation === 'delete') {
-          await this.remote.remove(item.entity, item.entityId);
-        } else {
-          const queued = fromQueue(item);
-          await this.remote.upsert(queued.entity, queued.payload);
-        }
-        await this.queue.remove(item.id);
-      } catch {
-        break;
-      }
+    if (!storeId) {
+      throw new Error('No se encontró una tienda para sincronizar.');
     }
-    if (pending.length === 0 || (await this.queue.list(storeId)).filter(
-      (item) => item.entity === 'product' || item.entity === 'category',
-    ).length === 0) {
-      try {
-        const remote = await this.remote.list(storeId);
-        const local = await this.list(storeId);
-        const pendingIds = new Set((await this.queue.list(storeId)).map((item) => item.entityId));
-        const localCategories = new Map(local.categories.map((category) => [category.id, category]));
-        const localProducts = new Map(local.products.map((product) => [product.id, product]));
-        for (const category of remote.categories) {
-          const localCategory = localCategories.get(category.id);
-          if (!pendingIds.has(category.id) && (!localCategory || category.updatedAt > localCategory.updatedAt)) {
-            await this.categories.save(category);
-          }
-        }
-        for (const product of remote.products) {
-          const localProduct = localProducts.get(product.id);
-          if (!pendingIds.has(product.id) && (!localProduct || product.updatedAt > localProduct.updatedAt)) {
-            await this.products.save(product);
-          }
-        }
-      } catch {
-        // A network failure keeps local data available and the queue pending.
-      }
-    }
+
+    // Modo seguro temporal:
+    // no envía ni elimina registros de Supabase.
+    // La lectura remota se realiza en list().
     return this.pendingCount(storeId);
   }
+
 }

@@ -202,9 +202,29 @@ export default function DashboardScreen() {
             <Text style={[styles.secondaryActionText, { color: HERO.text }]}>Hablar con Gwen</Text>
           </Pressable>
           <View style={styles.quickRow}>
-            <QuickAction label="Entrada" icon="arrow-down-left" onPress={() => router.push('/entries/new')} />
-            <QuickAction label="Venta" icon="shopping-bag" onPress={() => router.push('/sales/new')} />
-            <QuickAction label="Movimientos" icon="activity" onPress={() => router.push('/movements')} />
+            <QuickAction
+              label="Entrada"
+              icon="arrow-down-left"
+              onPress={() => router.push('/entries/new')}
+            />
+
+            <QuickAction
+              label="Venta"
+              icon="shopping-bag"
+              onPress={() => router.push('/sales/new')}
+            />
+
+            <QuickAction
+              label="Movimientos"
+              icon="activity"
+              onPress={() => router.push('/movements')}
+            />
+
+            <QuickAction
+              label="Informe"
+              icon="bar-chart-2"
+              onPress={() => router.push('/informes')}
+            />
           </View>
         </View>
 
@@ -340,8 +360,8 @@ const styles = StyleSheet.create({
   secondaryActionText: { fontSize: 15, fontWeight: '700' },
   gwenAction: { minHeight: 52, borderRadius: 17, borderWidth: 1, paddingHorizontal: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   quickRow: { flexDirection: 'row', gap: 8 },
-  quickAction: { flex: 1, minHeight: 62, borderRadius: 16, padding: 10, gap: 7, justifyContent: 'center' },
-  quickActionText: { fontSize: 11, fontWeight: '700' },
+  quickAction: { flex: 1, minHeight: 62, borderRadius: 16, padding: 8, gap: 7, justifyContent: 'center' },
+  quickActionText: { fontSize: 10, fontWeight: '700' },
   logout: { minHeight: 52, borderRadius: 17, borderWidth: 1, flexDirection: 'row', gap: 9, alignItems: 'center', justifyContent: 'center', marginTop: 'auto' },
   logoutText: { fontSize: 15, fontWeight: '700' },
 });

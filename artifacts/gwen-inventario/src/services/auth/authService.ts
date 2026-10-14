@@ -1,4 +1,4 @@
-import { LocalJsonStore } from '@/src/data/local/localJsonStore';
+import { supabase } from '@/src/data/supabase/supabaseClient';
 
 export interface AuthSession {
   userId: string;
@@ -25,36 +25,6 @@ export interface AuthService {
   clearSession(): Promise<void>;
 }
 
-type SupabaseAuthResponse = {
-  access_token?: string;
-  refresh_token?: string;
-  expires_in?: number;
-  expires_at?: number;
-  user?: {
-    id: string;
-    email?: string;
-    user_metadata?: { full_name?: string; store_name?: string };
-  };
-  session?: {
-    access_token: string;
-    refresh_token?: string;
-    expires_in?: number;
-    expires_at?: number;
-    user?: SupabaseAuthResponse['user'];
-  } | null;
-  msg?: string;
-  message?: string;
-  error_description?: string;
-};
-
-type OwnProfile = {
-  id: string;
-  store_id: string;
-  full_name: string | null;
-};
-
-const SESSION_KEY = 'auth-session';
-
 export class SupabaseNotConfiguredError extends Error {
   constructor() {
     super('Supabase no está configurado. Agrega las variables de entorno para continuar.');
@@ -62,132 +32,149 @@ export class SupabaseNotConfiguredError extends Error {
   }
 }
 
-export class SupabaseAuthService implements AuthService {
-  constructor(
-    private readonly url = process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$/, ''),
-    private readonly anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-    private readonly storage = new LocalJsonStore(),
-  ) {}
+function createId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+    const value = Math.floor(Math.random() * 16);
+    return (character === 'x' ? value : (value & 0x3) | 0x8).toString(16);
+  });
+}
 
-  private ensureConfigured(): { url: string; anonKey: string } {
-    if (!this.url || !this.anonKey) {
-      throw new SupabaseNotConfiguredError();
-    }
-    return { url: this.url, anonKey: this.anonKey };
+function traducirError(message: string): string {
+  if (message.includes('Invalid login credentials')) return 'Credenciales inválidas. Verifica tu correo y contraseña.';
+  if (message.includes('User already registered')) return 'Ya existe una cuenta con este correo.';
+  if (message.toLowerCase().includes('password')) return 'La contraseña debe tener al menos 6 caracteres.';
+  return message;
+}
+
+type PerfilUsuario = {
+  id_usuario: string;
+  id_tienda: string;
+  nombre_completo: string;
+  correo: string;
+  rol: string;
+  activo: boolean;
+};
+
+type TiendaRow = {
+  id_tienda: string;
+  nombre: string;
+};
+
+type SupaSession = {
+  access_token: string;
+  refresh_token?: string | null;
+  expires_at?: number | null;
+  user: { id: string; email?: string };
+};
+
+
+async function buildSessionFromSupabase(
+  supaSession: SupaSession
+): Promise<AuthSession> {
+  const { data: perfil, error: perfilError } = await supabase
+    .from('usuarios')
+    .select(
+      'id_usuario, id_tienda, nombre_completo, correo, rol, activo'
+    )
+    .eq('auth_user_id', supaSession.user.id)
+    .maybeSingle<PerfilUsuario>();
+
+  if (perfilError) {
+    throw new Error(`Error al consultar el perfil: ${perfilError.message}`);
   }
 
-  private async request<T>(
-    path: string,
-    init: RequestInit = {},
-    accessToken?: string,
-  ): Promise<T> {
-    const { url, anonKey } = this.ensureConfigured();
-    const response = await fetch(`${url}${path}`, {
-      ...init,
-      headers: {
-        apikey: anonKey,
-        'Content-Type': 'application/json',
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        ...init.headers,
-      },
-    });
-    const payload = (await response.json().catch(() => null)) as T & SupabaseAuthResponse | null;
-    if (!response.ok) {
-      const message =
-        payload?.message ?? payload?.msg ?? payload?.error_description ?? 'No fue posible completar la solicitud.';
-      throw new Error(message);
-    }
-    return payload as T;
-  }
-
-  private async profileForSession(session: AuthSession): Promise<AuthSession> {
-    const profiles = await this.request<OwnProfile[]>(
-      `/rest/v1/profiles?select=id,store_id,full_name&id=eq.${encodeURIComponent(session.userId)}&limit=1`,
-      { method: 'GET' },
-      session.accessToken,
+  if (!perfil) {
+    throw new Error(
+      'Tu cuenta de acceso existe, pero no tiene un perfil de Gwen vinculado. Contacta al administrador.'
     );
-    const profile = profiles[0];
-    return {
-      ...session,
-      storeId: profile?.store_id ?? null,
-      storeName: session.storeName ?? null,
-      displayName: profile?.full_name ?? session.displayName,
-    };
   }
 
-  private sessionFromResponse(payload: SupabaseAuthResponse): AuthSession {
-    const session = payload.session ?? payload;
-    const user = session.user ?? payload.user;
-    if (!session.access_token || !user?.id) {
-      throw new Error('Supabase no devolvió una sesión válida.');
-    }
-    return {
-      userId: user.id,
-      storeId: null,
-      storeName: user.user_metadata?.store_name ?? null,
-      email: user.email ?? null,
-      displayName: user.user_metadata?.full_name ?? null,
-      accessToken: session.access_token,
-      refreshToken: session.refresh_token ?? null,
-      expiresAt: session.expires_at
-        ? session.expires_at * 1000
-        : session.expires_in
-          ? Date.now() + session.expires_in * 1000
-          : null,
-    };
+  if (!perfil.activo) {
+    throw new Error('Tu usuario está inactivo. Contacta al administrador.');
   }
 
+  const { data: tienda, error: tiendaError } = await supabase
+    .from('tiendas')
+    .select('id_tienda, nombre')
+    .eq('id_tienda', perfil.id_tienda)
+    .maybeSingle<TiendaRow>();
+
+  if (tiendaError) {
+    throw new Error(`Error al consultar la tienda: ${tiendaError.message}`);
+  }
+
+  if (!tienda) {
+    throw new Error('No se encontró la tienda asociada a tu usuario.');
+  }
+
+  return {
+    // ID interno de Gwen, por ejemplo U001.
+    // El UUID de Supabase se conserva en auth_user_id.
+    userId: perfil.id_usuario,
+    storeId: perfil.id_tienda,
+    storeName: tienda.nombre,
+    email: perfil.correo || supaSession.user.email || null,
+    displayName: perfil.nombre_completo,
+    accessToken: supaSession.access_token,
+    refreshToken: supaSession.refresh_token ?? null,
+    expiresAt: supaSession.expires_at
+      ? supaSession.expires_at * 1000
+      : null,
+  };
+}
+
+
+export class SupabaseAuthService implements AuthService {
   async getSession(): Promise<AuthSession | null> {
-    const session = await this.storage.get<AuthSession>(SESSION_KEY);
-    if (!session) return null;
-    if (session.expiresAt && session.expiresAt <= Date.now()) {
-      await this.clearSession();
-      return null;
-    }
-    return session;
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session) return null;
+    return buildSessionFromSupabase(data.session as SupaSession);
   }
 
   async signIn(email: string, password: string): Promise<AuthSession> {
-    const payload = await this.request<SupabaseAuthResponse>('/auth/v1/token?grant_type=password', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    const session = await this.profileForSession(this.sessionFromResponse(payload));
-    await this.storage.set(SESSION_KEY, session);
-    return session;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(traducirError(error.message));
+    if (!data.session) throw new Error('No fue posible iniciar sesión.');
+    return buildSessionFromSupabase(data.session as SupaSession);
   }
 
-  async signUp(
-    input: SignUpInput,
-  ): Promise<{ session: AuthSession | null; needsEmailConfirmation: boolean }> {
-    const payload = await this.request<SupabaseAuthResponse>('/auth/v1/signup', {
-      method: 'POST',
-      body: JSON.stringify({
-        email: input.email,
-        password: input.password,
-        data: { full_name: input.displayName, store_name: input.storeName },
-      }),
+  async signUp(input: SignUpInput): Promise<{ session: AuthSession | null; needsEmailConfirmation: boolean }> {
+    const { data, error } = await supabase.auth.signUp({
+      email: input.email,
+      password: input.password,
     });
-    if (!payload.session && !payload.access_token) {
+    if (error) throw new Error(traducirError(error.message));
+
+    const user = data.user;
+    if (!user) throw new Error('No fue posible crear la cuenta.');
+
+    const idTienda = createId();
+    const { error: tiendaError } = await supabase.from('tiendas').insert({
+      id_tienda: idTienda,
+      nombre: input.storeName,
+      activa: true,
+    });
+    if (tiendaError) throw new Error(`Tienda: ${tiendaError.message}`);
+
+    const { error: usuarioError } = await supabase.from('usuarios').insert({
+      id_usuario: user.id,
+      id_tienda: idTienda,
+      nombre_completo: input.displayName,
+      correo: input.email,
+      rol: 'propietario',
+      activo: true,
+    });
+    if (usuarioError) throw new Error(`Usuario: ${usuarioError.message}`);
+
+    if (!data.session) {
       return { session: null, needsEmailConfirmation: true };
     }
-    const session = await this.profileForSession(this.sessionFromResponse(payload));
-    await this.storage.set(SESSION_KEY, session);
+    const session = await buildSessionFromSupabase(data.session as SupaSession);
     return { session, needsEmailConfirmation: false };
   }
 
   async clearSession(): Promise<void> {
-    const session = await this.storage.get<AuthSession>(SESSION_KEY);
-    await this.storage.remove(SESSION_KEY);
-    if (session?.accessToken && this.url && this.anonKey) {
-      await fetch(`${this.url.replace(/\/$/, '')}/auth/v1/logout`, {
-        method: 'POST',
-        headers: {
-          apikey: this.anonKey,
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      }).catch(() => undefined);
-    }
+    await supabase.auth.signOut();
   }
 }
 
@@ -216,7 +203,10 @@ export class UnconfiguredAuthService implements AuthService {
 /**
  * Mock Auth Service para desarrollo sin base de datos real.
  * Simula autenticación con usuarios en memoria/AsyncStorage.
+ * Se mantiene como respaldo si en algún momento se desactiva Supabase.
  */
+import { LocalJsonStore } from '@/src/data/local/localJsonStore';
+
 export class MockAuthService implements AuthService {
   private readonly storage = new LocalJsonStore();
   private readonly SESSION_KEY = 'mock-auth-session';
@@ -252,7 +242,7 @@ export class MockAuthService implements AuthService {
       displayName,
       accessToken: this.generateAccessToken(),
       refreshToken: `mock_refresh_${Date.now()}`,
-      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 días
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
     };
   }
 
@@ -286,35 +276,26 @@ export class MockAuthService implements AuthService {
     return session;
   }
 
-  async signUp(input: SignUpInput): Promise<{ session: AuthSession | null; needsEmailConfirmation: boolean }> {
-    const users = await this.getUsers();
-    const normalizedEmail = input.email.toLowerCase();
+  
+  async signUp(
+    input: SignUpInput
+  ): Promise<{ session: AuthSession | null; needsEmailConfirmation: boolean }> {
+    // Gwen ya tiene perfiles y tiendas existentes.
+    // No crear cuentas nuevas desde este flujo hasta implementar
+    // una asociación segura entre Auth, usuarios y tiendas.
+    void input;
 
-    if (users[normalizedEmail]) {
-      throw new Error('Ya existe una cuenta con este email.');
-    }
-
-    const userId = this.generateUserId();
-    const storeId = this.generateStoreId();
-
-    users[normalizedEmail] = {
-      password: input.password,
-      displayName: input.displayName,
-      storeName: input.storeName,
-    };
-    await this.setUsers(users);
-
-    const session = this.buildSession(userId, input.email, input.displayName, input.storeName, storeId);
-    await this.storage.set(this.SESSION_KEY, session);
-
-    return { session, needsEmailConfirmation: false };
+    throw new Error(
+      'El registro de nuevas cuentas está temporalmente deshabilitado. ' +
+      'Si ya tienes una cuenta, inicia sesión.'
+    );
   }
+
 
   async clearSession(): Promise<void> {
     await this.storage.remove(this.SESSION_KEY);
   }
 
-  // Métodos de utilidad para testing/desarrollo
   async createMockUser(email: string, password: string, displayName: string, storeName: string): Promise<void> {
     const users = await this.getUsers();
     users[email.toLowerCase()] = { password, displayName, storeName };

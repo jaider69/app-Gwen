@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,14 +28,39 @@ function isMovementFilter(value: unknown): value is MovementFilter {
 export default function MovementsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { filter: filterParam } = useLocalSearchParams<{ filter?: string }>();
+  const { filter: filterParam, date: dateParam } = useLocalSearchParams<{ filter?: string; date?: string }>();
   const { movements, products, loading, refresh, pendingCount } = useProducts();
   const [filter, setFilter] = useState<MovementFilter>(isMovementFilter(filterParam) ? filterParam : 'all');
+  useEffect(() => {
+  setFilter(isMovementFilter(filterParam) ? filterParam : 'all');
+  }, [filterParam]);
   const productNames = useMemo(() => new Map(products.map((product) => [product.id, product.name])), [products]);
-  const visibleMovements = useMemo(
-    () => movements.filter((movement) => filter === 'all' || movement.type === filter),
-    [filter, movements],
-  );
+  
+const visibleMovements = useMemo(() => {
+  return movements.filter((movement) => {
+    const matchesType =
+      filter === 'all' || movement.type === filter;
+
+    if (!matchesType) {
+      return false;
+    }
+
+    if (dateParam === 'today') {
+      const movementDate = new Date(movement.occurredAt);
+      const today = new Date();
+
+      const isToday =
+        movementDate.getFullYear() === today.getFullYear() &&
+        movementDate.getMonth() === today.getMonth() &&
+        movementDate.getDate() === today.getDate();
+
+      return isToday;
+    }
+
+    return true;
+  });
+}, [filter, movements, dateParam]);
+
 
   return (
     <AppBackground>

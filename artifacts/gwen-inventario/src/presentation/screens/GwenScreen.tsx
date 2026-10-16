@@ -29,10 +29,20 @@ type PendingOperation = {
   quantity: number | null;
 };
 
+  type NewProductDraft = {
+  name: string;
+  quantity: number | null;
+  categoryId: string;
+  unit: string;
+  price: number | null;
+  minimumStock: number | null;
+  };
+
+
 export default function GwenScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { products, recordSale, recordEntry } = useProducts();
+  const { products, categories, createProduct, recordSale, recordEntry } = useProducts();
   const recognizer = useRef(new SpeechRecognizer()).current;
   const [state, setState] = useState<AssistantState>('idle');
   const [transcript, setTranscript] = useState('');
@@ -40,6 +50,11 @@ export default function GwenScreen() {
   const [input, setInput] = useState('');
   const [pendingCommand, setPendingCommand] = useState<VoiceCommand | null>(null);
   const [pendingOperation, setPendingOperation] = useState<PendingOperation | null>(null);
+  const [newProduct, setNewProduct] = useState<NewProductDraft | null>(null);
+  const [newProductStep, setNewProductStep] = useState<
+    'askCreate' | 'category' | 'unit' | 'price' | 'minimumStock' | 'quantity' | 'confirm' | null
+  >(null);    
+
 
   const statusLabel = useMemo(() => {
     if (state === 'listening') return 'Escuchando...';
@@ -78,6 +93,221 @@ export default function GwenScreen() {
   }
 
   function processText(text: string) {
+        if (newProduct && newProductStep === 'askCreate') {
+          if (isConfirmation(text)) {
+            setNewProductStep('category');
+            setState('result');
+            setResponse(
+              `¡Vamos a crear ${newProduct.name}! ¿A qué categoría pertenece? Categorías disponibles: ${categories.map(category => category.name).join(', ')}.`
+            );
+            return;
+          }
+
+          if (isRejection(text)) {
+            setNewProduct(null);
+            setNewProductStep(null);
+            setState('result');
+            setResponse('De acuerdo, no creé ningún producto.');
+            return;
+          }
+
+          setState('result');
+          setResponse('Por favor, responde sí si quieres crear el producto o no si deseas cancelar.');
+          return;
+          }
+        if (newProduct && newProductStep === 'category') {
+          const answer = normalizeVoiceText(text);
+
+          const selectedCategory = categories.find(
+            category => normalizeVoiceText(category.name) === answer
+          );
+
+          if (!selectedCategory) {
+            setState('result');
+            setResponse(
+              `No encontré esa categoría. Puedes elegir entre: ${categories
+                .map(category => category.name)
+                .join(', ')}. Dime el nombre de una de ellas.`
+            );
+            return;
+          }
+
+          setNewProduct({
+            ...newProduct,
+            categoryId: selectedCategory.id,
+          });
+
+          setNewProductStep('unit');
+          setState('result');
+          setResponse(
+            `Perfecto, categoría ${selectedCategory.name}. ¿En qué unidad se vende ${newProduct.name}? Por ejemplo: unidad, libra, kilogramo, litro o paquete.`
+          );
+          return;
+        }
+    
+    if (newProduct && newProductStep === 'unit') {
+      const unit = text.trim();
+
+      if (!unit) {
+        setState('result');
+        setResponse(
+          'Dime la unidad de medida, por ejemplo: unidad, libra, kilogramo, litro o paquete.'
+        );
+        return;
+      }
+
+      setNewProduct({
+        ...newProduct,
+        unit,
+      });
+
+      setNewProductStep('price');
+      setState('result');
+      setResponse(
+        `¿Cuál es el precio de venta de ${newProduct.name}? Dime el valor en pesos colombianos.`
+      );
+      return;
+    }
+    
+    if (newProduct && newProductStep === 'price') {
+      const normalizedPrice = text
+        .replace(/\$/g, '')
+        .replace(/\s/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.');
+
+      const price = Number(normalizedPrice);
+
+      if (!Number.isFinite(price) || price <= 0) {
+        setState('result');
+        setResponse(
+          'No pude reconocer el precio. Dime el valor en pesos colombianos, por ejemplo: 2500.'
+        );
+        return;
+      }
+
+      setNewProduct({
+        ...newProduct,
+        price,
+      });
+
+      setNewProductStep('minimumStock');
+      setState('result');
+      setResponse(
+        `¿Cuál es la cantidad mínima de ${newProduct.name} que deseas mantener en tu inventario? Dime un número entero.`
+      );
+      return;
+    }
+    
+    if (newProduct && newProductStep === 'minimumStock') {
+      const minimumStock = parseQuantity(text);
+
+      if (
+        minimumStock === null ||
+        !Number.isInteger(minimumStock) ||
+        minimumStock < 0
+      ) {
+        setState('result');
+        setResponse(
+          'Dime una cantidad entera igual o mayor que cero para el stock mínimo. Por ejemplo: 5.'
+        );
+        return;
+      }
+
+      setNewProduct({
+        ...newProduct,
+        minimumStock,
+      });
+
+      setNewProductStep('confirm');
+      setState('confirming');
+      setResponse(
+        `Voy a crear ${newProduct.name} con estos datos: categoría ${categories.find(category => category.id === newProduct.categoryId)?.name ?? 'sin categoría'}, unidad ${newProduct.unit}, precio $${newProduct.price?.toLocaleString('es-CO') ?? 'sin precio'}, stock inicial ${newProduct.quantity ?? 'sin definir'} y stock mínimo ${minimumStock}. ¿Confirmas la creación?`
+      );
+      return;
+    }
+    
+    if (newProduct && newProductStep === 'confirm') {
+      if (isRejection(text)) {
+        setNewProduct(null);
+        setNewProductStep(null);
+        setState('result');
+        setResponse('De acuerdo, cancelé la creación del producto.');
+        return;
+      }
+
+      if (!isConfirmation(text)) {
+        setState('result');
+        setResponse('Responde sí para crear el producto o no para cancelar.');
+        return;
+      }
+
+      if (newProduct.quantity === null) {
+        setNewProductStep('quantity');
+        setState('result');
+        setResponse(`¿Cuántas unidades de ${newProduct.name} tienes inicialmente?`);
+        return;
+      }
+
+      if (
+        !newProduct.categoryId ||
+        !newProduct.unit ||
+        newProduct.price === null ||
+        newProduct.minimumStock === null
+      ) {
+        setState('error');
+        setResponse('Faltan datos del producto. No se ha creado.');
+        return;
+      }
+
+      setState('processing');
+
+      void createProduct({
+        name: newProduct.name,
+        brand: '',
+        categoryId: newProduct.categoryId,
+        unit: newProduct.unit,
+        stock: newProduct.quantity,
+        price: newProduct.price,
+        minimumStock: newProduct.minimumStock,
+      })
+        .then(() => {
+          setNewProduct(null);
+          setNewProductStep(null);
+          setState('result');
+          setResponse(
+            `¡Listo! Creé ${newProduct.name} con ${newProduct.quantity} unidades iniciales.`
+          );
+        })
+        .catch(() => {
+          setState('error');
+          setResponse(
+            'No pude crear el producto. Revisa los datos e inténtalo de nuevo.'
+          );
+        });
+
+      return;
+    }
+
+    if (newProduct && newProductStep === 'quantity') {
+      const quantity = parseQuantity(text);
+
+      if (quantity === null || quantity < 0) {
+        setState('result');
+        setResponse('Dime una cantidad válida de unidades iniciales.');
+        return;
+      }
+
+      const updatedProduct = { ...newProduct, quantity };
+      setNewProduct(updatedProduct);
+      setNewProductStep('confirm');
+      setState('confirming');
+      setResponse(
+        `Confirma la creación de ${updatedProduct.name} con ${quantity} unidades iniciales, precio $${updatedProduct.price?.toLocaleString('es-CO')} y stock mínimo ${updatedProduct.minimumStock}. ¿Sí o no?`
+      );
+      return;
+    }
+
     if (pendingOperation && isConfirmation(text)) {
       setState('processing');
       void executePendingOperation(pendingOperation);
@@ -111,10 +341,29 @@ export default function GwenScreen() {
       processQuery(command);
       return;
     }
-    if (command.productCandidates.length === 0) {
-      setState('error');
-      setResponse('No encontré ese producto en tu inventario.');
+    if (command.kind === 'navigate') {
+      router.push(command.destination as never);
+      setState('result');
+      setResponse('Abriendo la sección solicitada.');
       return;
+    }
+
+    if (command.productCandidates.length === 0) {
+    setNewProduct({
+      name: command.productText,
+      quantity: command.quantity,
+      categoryId: '',
+      unit: '',
+      price: null,
+      minimumStock: null,
+    });
+
+    setNewProductStep('askCreate');
+    setState('idle');
+    setResponse(
+      `No encontré ${command.productText} en tu inventario. ¿Quieres crearlo? Responde sí o no.`
+    );
+    return;
     }
     if (command.productCandidates.length > 1) {
       setState('result');

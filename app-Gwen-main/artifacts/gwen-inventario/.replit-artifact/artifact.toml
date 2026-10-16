@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "Gwen Inventario"
+description = "Aplicación móvil offline-first para tenderos y administradores de tiendas de barrio, con autenticación, aislamiento por tienda y gestión de productos e inventario."
+version = "1.0.0"
+id = "artifacts/gwen-inventario"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 21639
+
+[services.development]
+run = "pnpm --filter @workspace/gwen-inventario run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gwen-inventario", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/gwen-inventario", "run", "serve" ]
+
+[services.env]
+PORT = "21639"
+BASE_PATH = "/"

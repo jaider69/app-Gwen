@@ -70,6 +70,7 @@ export class SpeechRecognizer {
       this.nativeResultSubscription = ExpoSpeechRecognitionModule.addListener('result', (event: any) => {
         if (event.results && event.results.length > 0) {
           const transcript = event.results[0]?.transcript ?? '';
+          console.log('Gwen escuchó:', transcript);
           if (transcript && this.onTranscriptCallback) {
             this.onTranscriptCallback(transcript);
           }

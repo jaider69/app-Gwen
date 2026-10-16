@@ -5,8 +5,15 @@ export type VoiceOperation = 'sale' | 'entry';
 export type VoiceQuery = 'stock' | 'low-stock' | 'out-of-stock';
 
 export type VoiceCommand =
-  | { kind: 'operation'; operation: VoiceOperation; quantity: number | null; productCandidates: Product[] }
+  | {
+    kind: 'operation';
+    operation: VoiceOperation;
+    quantity: number | null;
+    productText: string;
+    productCandidates: Product[];
+    }
   | { kind: 'query'; query: VoiceQuery; productCandidates: Product[] }
+  | { kind: 'navigate'; destination: string; filter?: string }
   | { kind: 'unknown' };
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -78,6 +85,35 @@ export function parseQuantity(value: string): number | null {
 export function parseVoiceCommand(transcript: string, products: Product[]): VoiceCommand {
   const text = normalizeVoiceText(transcript).replace(/^gwen[\s,:-]*/, '').trim();
   if (!text) return { kind: 'unknown' };
+  // Comandos de navegación
+  if (/^(muestrame|mostrar|ver|abrir|ir a|llevame a|quiero ver)\s+(las?\s+)?ventas de hoy$/.test(text)) {
+    return {
+      kind: 'navigate',
+      destination: '/movements?filter=sale&date=today',
+      filter: 'sale',
+    };
+  }
+
+  if (/^(muestrame|mostrar|ver|abrir|ir a|llevame a|quiero ver)\s+(las?\s+)?ventas$/.test(text)) {
+    return {
+      kind: 'navigate',
+      destination: '/movements?filter=sale',
+      filter: 'sale',
+    };
+  }
+
+  if (/^(ver|abrir|mostrar|muestrame|llevame a|ir a)\s+(los?\s+)?movimientos$/.test(text)) {
+    return { kind: 'navigate', destination: '/movements' };
+  }
+
+  if (/^(abrir|mostrar|muestrame|ver|ir a|llevame a)\s+(el\s+)?inventario$/.test(text)) {
+    return { kind: 'navigate', destination: '/products' };
+  }
+
+  if (/^(llevame a|ir a|abrir|mostrar|muestrame|ver)\s+(los?\s+)?productos agotados$/.test(text)) {
+    return { kind: 'navigate', destination: '/products?filter=out-of-stock', filter: 'out-of-stock' };
+  }
+
 
   if (/que productos tienen (poco stock|stock bajo)|productos con (poco stock|stock bajo)/.test(text)) {
     return { kind: 'query', query: 'low-stock', productCandidates: [] };
@@ -112,7 +148,13 @@ function parseOperation(operation: VoiceOperation, remainder: string, products: 
     .replace(/\b(unidades?|paquetes?|productos?|de|del|la|el|las|los)\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return { kind: 'operation', operation, quantity, productCandidates: findProducts(productText, products) };
+  return {
+  kind: 'operation',
+  operation,
+  quantity,
+  productText,
+  productCandidates: findProducts(productText, products),
+  };
 }
 
 function findProducts(productText: string, products: Product[]): Product[] {

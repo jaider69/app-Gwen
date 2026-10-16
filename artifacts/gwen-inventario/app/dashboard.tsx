@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import type { ComponentProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import rawColors from '@/constants/colors';
@@ -17,6 +17,17 @@ import {
   type InventoryAlert,
 } from '@/src/services/alerts/notificationService';
 import { getProductHealth } from '@/src/services/products/productService';
+
+// Carga de imágenes locales usando 2 niveles hacia atrás (../../)
+// @ts-ignore
+const heroIconSource = require('../assets/images/Cajas.png');
+const paqueteIconSource = require('../assets/images/Paquete.png');
+const disminucionIconSource = require('../assets/images/disminucion.png');
+const agotadoIconSource = require('../assets/images/agotado.png');
+const porvencerIconSource = require('../assets/images/porvencer.png');
+const alertaIconSource = require('../assets/images/alerta.png');
+const monedasIconSource = require('../assets/images/monedas.png');
+const usuarioIconSource = require('../assets/images/usuario.png');
 
 // Texto/elementos que flotan directamente sobre el degradado de fondo.
 const HERO = {
@@ -39,8 +50,6 @@ const SURFACE = {
   primary: '#1F5C8C',
   primaryForeground: '#FFFFFF',
 };
-
-type SurfaceColors = typeof SURFACE;
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
@@ -97,16 +106,18 @@ export default function DashboardScreen() {
             onPress={() => router.push('/profile')}
             accessibilityRole="button"
             accessibilityLabel="Abrir perfil"
-            style={[styles.profileButton, { backgroundColor: HERO.glassBg, borderColor: HERO.glassBorder }]}
           >
-            <Feather name="user" size={20} color={HERO.text} />
+            <Image source={usuarioIconSource} style={{ width: 28, height: 28, resizeMode: 'contain' }} />
           </Pressable>
         </View>
 
         <View style={styles.hero}>
           <View style={styles.heroTopline}>
-            <View style={[styles.heroIcon, { backgroundColor: HERO.glassBg, borderColor: HERO.glassBorder }]}>
-              <Feather name="package" size={19} color={HERO.text} />
+            <View style={styles.heroIcon}>
+              <Image 
+                source={heroIconSource} 
+                style={styles.heroImage} 
+              />
             </View>
             <View style={[styles.syncPill, { backgroundColor: HERO.pillBg }]}>
               <View style={[styles.syncDot, { backgroundColor: pendingCount > 0 ? SURFACE.destructive : SURFACE.primary }]} />
@@ -122,11 +133,16 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.metricsGrid}>
-          <MetricCard label="Productos" value={loading ? '—' : String(products.length)} icon="package" onPress={() => router.push('/products')} />
-          <MetricCard label="Stock bajo" value={String(lowStockCount)} icon="trending-down" tone="warning" onPress={() => router.push('/products?filter=low-stock')} />
-          <MetricCard label="Agotados" value={String(outOfStockCount)} icon="slash" tone="danger" onPress={() => router.push('/products?filter=out-of-stock')} />
-          <MetricCard label="Por vencer" value={String(expiringCount)} icon="clock" tone="warning" onPress={() => router.push('/products?filter=expiring')} />
-          <MetricCard label="Ventas del día" value={formatCurrency(salesToday)} icon="shopping-bag" onPress={() => router.push('/movements?filter=sale')} />
+          <MetricCard 
+            label="Productos" 
+            value={loading ? '—' : String(products.length)} 
+            imageSource={paqueteIconSource}
+            onPress={() => router.push('/products')} 
+          />
+          <MetricCard label="Stock bajo" value={String(lowStockCount)} imageSource={disminucionIconSource} tone="warning" onPress={() => router.push('/products?filter=low-stock')} />
+          <MetricCard label="Agotados" value={String(outOfStockCount)} imageSource={agotadoIconSource} tone="danger" onPress={() => router.push('/products?filter=out-of-stock')} />
+          <MetricCard label="Por vencer" value={String(expiringCount)} imageSource={porvencerIconSource} tone="warning" onPress={() => router.push('/products?filter=expiring')} />
+          <MetricCard label="Ventas del día" value={formatCurrency(salesToday)} imageSource={monedasIconSource} onPress={() => router.push('/movements?filter=sale')} />
         </View>
 
         <View style={styles.alertSection}>
@@ -137,7 +153,7 @@ export default function DashboardScreen() {
                 {alerts.length === 0 ? 'Todo está en orden' : `${alerts.length} aviso${alerts.length === 1 ? '' : 's'} para revisar`}
               </Text>
             </View>
-            <Feather name={alerts.length > 0 ? 'alert-circle' : 'check-circle'} size={21} color={HERO.text} />
+            <Image source={alertaIconSource} style={{ width: 22, height: 22, resizeMode: 'contain' }} />
           </View>
 
           {alerts.length === 0 ? (
@@ -246,12 +262,14 @@ function MetricCard({
   label,
   value,
   icon,
+  imageSource,
   tone = 'normal',
   onPress,
 }: {
   label: string;
   value: string;
-  icon: ComponentProps<typeof Feather>['name'];
+  icon?: ComponentProps<typeof Feather>['name'];
+  imageSource?: any;
   tone?: 'normal' | 'warning' | 'danger';
   onPress?: () => void;
 }) {
@@ -265,7 +283,11 @@ function MetricCard({
       style={({ pressed }) => [styles.metricCard, { backgroundColor: SURFACE.card, opacity: pressed && onPress ? 0.85 : 1 }]}
     >
       <View style={[styles.metricIcon, { backgroundColor: tone === 'danger' ? '#FCEBEB' : tone === 'warning' ? '#FFF5D6' : SURFACE.secondary }]}>
-        <Feather name={icon} size={16} color={iconColor} />
+        {imageSource ? (
+          <Image source={imageSource} style={{ width: 20, height: 20, resizeMode: 'contain' }} />
+        ) : (
+          icon && <Feather name={icon} size={16} color={iconColor} />
+        )}
       </View>
       <Text style={[styles.metricValue, { color: SURFACE.cardForeground }]}>{value}</Text>
       <Text style={[styles.metricLabel, { color: SURFACE.mutedForeground }]}>{label}</Text>
@@ -278,19 +300,40 @@ function formatCurrency(value: number): string {
 }
 
 function AlertRow({ alert }: { alert: InventoryAlert }) {
+  const router = useRouter();
   const isExpired = alert.type === 'out-of-stock';
   const accent = isExpired ? SURFACE.destructive : '#B7791F';
-  const icon = alert.type === 'low-stock' ? 'trending-down' : alert.type === 'out-of-stock' ? 'slash' : 'clock';
+
+  // Determinamos a qué ruta redirigir según el tipo de alerta
+  const handlePress = () => {
+    if (alert.type === 'low-stock') {
+      router.push('/products?filter=low-stock');
+    } else if (alert.type === 'out-of-stock') {
+      router.push('/products?filter=out-of-stock');
+    } else if (alert.type === 'expiring') {
+      router.push('/products?filter=expiring');
+    } else {
+      router.push('/products');
+    }
+  };
+
   return (
-    <View style={[styles.alertRow, { backgroundColor: SURFACE.card }]}>
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [
+        styles.alertRow, 
+        { backgroundColor: SURFACE.card, opacity: pressed ? 0.85 : 1 }
+      ]}
+    >
       <View style={[styles.alertIcon, { backgroundColor: isExpired ? '#FCEBEB' : '#FFF5D6' }]}>
-        <Feather name={icon} size={17} color={accent} />
+        <Image source={disminucionIconSource} style={{ width: 18, height: 18, resizeMode: 'contain' }} />
       </View>
       <View style={styles.alertCopy}>
         <Text style={[styles.alertTitle, { color: SURFACE.cardForeground }]}>{alert.title}: {alert.productName}</Text>
         <Text style={[styles.alertMessage, { color: SURFACE.mutedForeground }]}>{alert.message}</Text>
       </View>
-    </View>
+      <Feather name="chevron-right" size={18} color={SURFACE.mutedForeground} style={{ alignSelf: 'center' }} />
+    </Pressable>
   );
 }
 
@@ -323,10 +366,11 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 1.1 },
   title: { fontSize: 28, fontWeight: '700', marginTop: 4 },
   storeName: { fontSize: 14, fontWeight: '600', marginTop: 3 },
-  profileButton: { width: 46, height: 46, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  profileButton: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center' },
   hero: { paddingVertical: 6, gap: 10 },
   heroTopline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heroIcon: { width: 38, height: 38, borderRadius: 13, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  heroIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  heroImage: { width: 38, height: 38, resizeMode: 'contain' },
   syncPill: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6 },
   syncDot: { width: 7, height: 7, borderRadius: 4 },
   syncText: { fontSize: 11, fontWeight: '700' },

@@ -1,3 +1,4 @@
+
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -11,70 +12,107 @@ export default function LoginScreen() {
   const colors = useColors();
   const router = useRouter();
   const { signIn, error, clearError } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  
-  // Estado para controlar si se muestra o se oculta la contraseña
   const [showPassword, setShowPassword] = useState(false);
 
   async function submit() {
     clearError();
     setSubmitting(true);
-    const success = await signIn(email.trim(), password);
-    setSubmitting(false);
-    if (success) router.replace('/dashboard');
+
+    try {
+      const success = await signIn(email.trim(), password);
+
+      if (success) {
+        router.replace('/dashboard');
+      }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
-    <AuthLayout eyebrow="BIENVENIDO DE NUEVO" title="Inicia sesión" description="Accede a la tienda que tienes vinculada a tu cuenta.">
+    <AuthLayout
+      eyebrow="BIENVENIDO DE NUEVO"
+      title="Inicia sesión"
+      description="Accede a la tienda que tienes vinculada a tu cuenta."
+    >
       <View style={styles.form}>
         {error ? <AuthNotice tone="error">{error}</AuthNotice> : null}
-        
-        {/* Campo de Correo (mantiene tu componente AuthInput original) */}
-        <AuthInput 
-          icon="mail" 
-          label="Correo" 
-          value={email} 
-          placeholder="tucorreo@ejemplo.com" 
-          autoCapitalize="none" 
-          keyboardType="email-address" 
-          onChangeText={setEmail} 
+
+        <AuthInput
+          icon="mail"
+          label="Correo"
+          value={email}
+          placeholder="tucorreo@ejemplo.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          onChangeText={setEmail}
         />
 
-        {/* Contenedor del campo de Contraseña con íconos y texto en negro */}
         <View style={styles.passwordGroup}>
           <Text style={styles.label}>Contraseña</Text>
+
           <View style={styles.passwordContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color="#000000" style={styles.leftIcon} />
+            <Ionicons
+              name="lock-closed-outline"
+              size={20}
+              color="#5B3EAF"
+              style={styles.leftIcon}
+            />
+
             <TextInput
               style={styles.inputPassword}
               placeholder="Tu contraseña"
               placeholderTextColor="#8A8A8A"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry={!showPassword} // Oculta o muestra el texto
+              secureTextEntry={!showPassword}
               autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="go"
+              onSubmitEditing={() => {
+                if (email.trim() && password && !submitting) {
+                  void submit();
+                }
+              }}
             />
-            {/* Botón del ojito en color negro y touch target de 44px */}
-            <TouchableOpacity 
-              style={styles.eyeButton} 
-              onPress={() => setShowPassword(!showPassword)}
+
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword((visible) => !visible)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={
+                showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'
+              }
+              accessibilityState={{ selected: showPassword }}
             >
-              <Ionicons 
-                name={showPassword ? 'eye-outline' : 'eye-off-outline'} 
-                size={22} 
-                color="#000000" 
+              <Ionicons
+                name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                size={22}
+                color="#5B3EAF"
               />
             </TouchableOpacity>
           </View>
         </View>
 
-        <AuthButton label={submitting ? 'Entrando…' : 'Entrar a mi tienda'} onPress={submit} disabled={submitting || !email || !password} />
-        
+        <AuthButton
+          label={submitting ? 'Entrando…' : 'Entrar a mi tienda'}
+          onPress={submit}
+          disabled={submitting || !email.trim() || !password}
+        />
+
         <Text style={[styles.switchText, { color: colors.mutedForeground }]}>
-          ¿Aún no tienes cuenta? <Link href="/auth/register" style={{ color: colors.primary, fontWeight: '700' }}>Regístrate</Link>
+          ¿Aún no tienes cuenta?{' '}
+          <Link
+            href="/auth/register"
+            style={{ color: colors.primary, fontWeight: '700' }}
+          >
+            Regístrate
+          </Link>
         </Text>
       </View>
     </AuthLayout>
@@ -82,9 +120,17 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  form: { gap: 16 },
-  passwordGroup: { gap: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: '#000000' }, // Texto 'Contraseña' en negro
+  form: {
+    gap: 16,
+  },
+  passwordGroup: {
+    gap: 6,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5B3EAF',
+  },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -94,7 +140,9 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
     paddingHorizontal: 12,
   },
-  leftIcon: { marginRight: 8 },
+  leftIcon: {
+    marginRight: 8,
+  },
   inputPassword: {
     flex: 1,
     height: 48,
@@ -102,10 +150,14 @@ const styles = StyleSheet.create({
     color: '#222222',
   },
   eyeButton: {
-    width: 44, // Touch target mínimo de 44px
+    width: 44,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  switchText: { fontSize: 14, textAlign: 'center', lineHeight: 21 },
+  switchText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 21,
+  },
 });

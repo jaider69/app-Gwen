@@ -140,29 +140,150 @@ class SupabaseInventoryGateway {
 
     return stock;
   }
+
+    async registerEntry(payload: {
+    movementId: string;
+    storeId: string;
+    productId: string;
+    userId: string;
+    quantity: number;
+    note?: string;
+  }): Promise<Record<string, unknown>> {
+    const result = await this.request('/rest/v1/rpc/registrar_entrada_gwen', {
+      method: 'POST',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        p_movement_id: payload.movementId,
+        p_store_id: payload.storeId,
+        p_product_id: payload.productId,
+        p_user_id: payload.userId,
+        p_quantity: payload.quantity,
+        p_observacion: payload.note ?? 'Entrada registrada desde Gwen',
+      }),
+    });
+
+    if (!result || typeof result !== 'object') {
+      throw new Error('Supabase no confirmó el registro de la entrada.');
+    }
+
+    return result as Record<string, unknown>;
+  }
+
+  
+  async getProduct(storeId: string, productId: string): Promise<Product> {
+    const encodedStoreId = encodeURIComponent(storeId);
+    const encodedProductId = encodeURIComponent(productId);
+
+    const [productRows, inventoryRows] = await Promise.all([
+      this.request(
+        `/rest/v1/productos?id_producto=eq.${encodedProductId}` +
+          '&activo=eq.true' +
+          '&select=id_producto,id_categoria,nombre,unidad_medida,precio_referencia',
+      ),
+      this.request(
+        `/rest/v1/inventario?id_tienda=eq.${encodedStoreId}` +
+          `&id_producto=eq.${encodedProductId}` +
+          '&select=id_tienda,id_producto,stock_actual,stock_minimo,actualizado_en',
+      ),
+    ]);
+
+    const products = productRows as Array<Record<string, unknown>>;
+    const inventory = inventoryRows as Array<Record<string, unknown>>;
+
+    if (products.length !== 1 || inventory.length !== 1) {
+      throw new Error(
+        'No se encontró el producto o su inventario en la tienda de Supabase.',
+      );
+    }
+
+    const product = products[0];
+    const stockRow = inventory[0];
+
+    const stock = Number(stockRow.stock_actual);
+    const price = Number(product.precio_referencia);
+    const minimumStock = Number(stockRow.stock_minimo ?? 0);
+    const updatedAt = String(
+      stockRow.actualizado_en ?? new Date().toISOString(),
+    );
+
+    if (
+      String(stockRow.id_tienda) !== storeId ||
+      !Number.isInteger(stock) ||
+      stock < 0 ||
+      !Number.isFinite(price) ||
+      price < 0
+    ) {
+      throw new Error('El producto tiene datos de inventario o precio inválidos.');
+    }
+
+    return {
+      id: String(product.id_producto),
+      storeId,
+      name: String(product.nombre),
+      brand: '',
+      categoryId: String(product.id_categoria ?? ''),
+      unit: String(product.unidad_medida ?? 'unidad'),
+      stock,
+      price,
+      minimumStock,
+      createdAt: updatedAt,
+      updatedAt,
+    };
+  }
+
+  
   async list(storeId: string): Promise<InventoryMovement[]> {
     const rows = (await this.request(
-      `/rest/v1/inventory_movements?store_id=eq.${encodeURIComponent(storeId)}&select=*&order=occurred_at.desc`,
-    )) as unknown[];
-    return rows.map((item) => {
-      const row = item as Record<string, unknown>;
-      return {
-        id: String(row.id),
-        storeId: String(row.store_id),
-        productId: String(row.product_id),
-        userId: String(row.user_id),
-        userName: String(row.user_name ?? 'Usuario'),
-        quantity: Number(row.quantity ?? 0),
-        type: row.type as InventoryMovement['type'],
-        occurredAt: String(row.occurred_at),
-        stockBefore: Number(row.stock_before ?? 0),
-        stockAfter: Number(row.stock_after ?? 0),
-        note: row.note ? String(row.note) : undefined,
-        createdAt: String(row.created_at),
-        updatedAt: String(row.updated_at),
-      };
-    });
+      `/rest/v1/movimientos_inventario?id_tienda=eq.${encodeURIComponent(storeId)}` +
+        '&select=id_movimiento,id_tienda,id_producto,fecha_hora,tipo,cantidad,id_venta,observacion,stock_anterior,stock_posterior' +
+        '&order=fecha_hora.desc',
+    )) as Array<Record<string, unknown>>;
+
+    return rows.map((row) => ({
+      id: String(row.id_movimiento),
+      storeId: String(row.id_tienda),
+      productId: String(row.id_producto),
+      userId: '',
+      userName: 'Usuario',
+      quantity: Number(row.cantidad ?? 0),
+      type:
+        row.tipo === 'entrada'
+          ? 'entry'
+          : row.tipo === 'salida'
+            ? 'sale'
+            : 'adjustment',
+      occurredAt: String(row.fecha_hora),
+      stockBefore:
+        row.stock_anterior == null ? null : Number(row.stock_anterior),
+      stockAfter:
+        row.stock_posterior == null ? null : Number(row.stock_posterior),
+      note: row.observacion ? String(row.observacion) : undefined,
+      createdAt: String(row.fecha_hora),
+      updatedAt: String(row.fecha_hora),
+    }));
   }
+  
+  async listSales(storeId: string): Promise<Sale[]> {
+    const rows = (await this.request(
+      `/rest/v1/ventas?id_tienda=eq.${encodeURIComponent(storeId)}` +
+        '&select=id_venta,id_tienda,id_usuario,fecha_hora,total' +
+        '&order=fecha_hora.desc',
+    )) as Array<Record<string, unknown>>;
+
+    return rows.map((row) => ({
+      id: String(row.id_venta),
+      storeId: String(row.id_tienda),
+      userId: String(row.id_usuario),
+      userName: 'Usuario',
+      soldAt: String(row.fecha_hora),
+      total: Number(row.total ?? 0),
+      status: 'completed',
+      createdAt: String(row.fecha_hora),
+      updatedAt: String(row.fecha_hora),
+    }));
+  }
+
+
 }
 
 function movementPayload(movement: InventoryMovement): Record<string, unknown> {
@@ -195,35 +316,61 @@ export class InventoryService {
     this.remote = new SupabaseInventoryGateway(getSession);
   }
 
+  
   async listMovements(storeId: string): Promise<InventoryMovement[]> {
-    const local = await this.movements.list(storeId);
-    try {
-      const remote = await this.remote.list(storeId);
-      const localById = new Map(local.map((movement) => [movement.id, movement]));
-      for (const movement of remote) {
-        const current = localById.get(movement.id);
-        if (!current || movement.updatedAt > current.updatedAt) {
-          await this.movements.save(movement);
-          localById.set(movement.id, movement);
-        }
-      }
-      return Array.from(localById.values()).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
-    } catch {
-      return local.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
-    }
+    return this.remote.list(storeId);
   }
 
+
+  
   async listSales(storeId: string): Promise<Sale[]> {
-    const local = await this.sales.list(storeId);
-    return local.sort((a, b) => b.soldAt.localeCompare(a.soldAt));
+    return this.remote.listSales(storeId);
   }
 
-  async recordEntry(scope: InventoryScope, operation: InventoryOperation): Promise<InventoryMovement> {
+
+    async recordEntry(
+    scope: InventoryScope,
+    operation: InventoryOperation,
+  ): Promise<InventoryMovement> {
     validateQuantity(operation.quantity);
-    const product = await this.requireProduct(scope.storeId, operation.productId);
+
+    const product = await this.remote.getProduct(
+      scope.storeId,
+      operation.productId,
+    );
+
+    const movementId = createLocalUuid();
+
+    const result = await this.remote.registerEntry({
+      movementId,
+      storeId: scope.storeId,
+      productId: product.id,
+      userId: scope.userId,
+      quantity: operation.quantity,
+      note: 'Entrada registrada desde Gwen',
+    });
+
+    if (result.success !== true) {
+      throw new Error('Supabase no confirmó el registro de la entrada.');
+    }
+
     const now = new Date().toISOString();
-    const movement: InventoryMovement = {
-      id: createLocalUuid(),
+    const stockBefore = Number(result.stock_before);
+    const stockAfter = Number(result.stock_after);
+
+    if (
+      !Number.isInteger(stockBefore) ||
+      !Number.isInteger(stockAfter) ||
+      stockBefore < 0 ||
+      stockAfter !== stockBefore + operation.quantity
+    ) {
+      throw new Error(
+        'La entrada se registró, pero Supabase no devolvió un stock válido.',
+      );
+    }
+
+    return {
+      id: movementId,
       storeId: scope.storeId,
       productId: product.id,
       userId: scope.userId,
@@ -231,29 +378,26 @@ export class InventoryService {
       quantity: operation.quantity,
       type: 'entry',
       occurredAt: now,
-      stockBefore: product.stock,
-      stockAfter: product.stock + operation.quantity,
+      stockBefore,
+      stockAfter,
+      note: 'Entrada registrada desde Gwen',
       createdAt: now,
       updatedAt: now,
     };
-    await this.saveStockAndMovement(
-      { ...product, stock: movement.stockAfter, updatedAt: now },
-      movement,
-    );
-    return movement;
   }
 
   /**
    * Shared sale command used by the manual screen now and by the future voice layer.
    * The voice layer should parse a command into { productId, quantity } and call this method.
    */
+  
   async recordSale(
     scope: InventoryScope,
     operation: InventoryOperation,
   ): Promise<Sale> {
     validateQuantity(operation.quantity);
 
-    const product = await this.requireProduct(
+    const product = await this.remote.getProduct(
       scope.storeId,
       operation.productId,
     );
@@ -262,102 +406,88 @@ export class InventoryService {
       throw new Error('No hay suficiente inventario disponible.');
     }
 
-    const now = new Date().toISOString();
-    const subtotal = Math.round(
-      product.price * operation.quantity * 100,
-    ) / 100;
-
     const saleId = createLocalUuid();
     const detailId = createLocalUuid();
     const movementId = createLocalUuid();
 
-    const sale: Sale = {
+    const channel = operation.channel ?? 'manual';
+    const payment = operation.payment ?? 'efectivo';
+
+    const result = await this.remote.registerSale({
+      saleId,
+      detailId,
+      movementId,
+      storeId: scope.storeId,
+      userId: scope.userId,
+      productId: product.id,
+      quantity: operation.quantity,
+      unitPrice: product.price,
+      channel,
+      payment,
+    });
+
+    if (result.success !== true) {
+      throw new Error('Supabase no confirmó el registro de la venta.');
+    }
+
+    const now = new Date().toISOString();
+
+    return {
       id: saleId,
       storeId: scope.storeId,
       userId: scope.userId,
       userName: scope.userName || 'Usuario',
       soldAt: now,
-      total: subtotal,
+      total: Number(result.total ?? product.price * operation.quantity),
       status: 'completed',
       createdAt: now,
       updatedAt: now,
     };
-
-    const item: SaleItem = {
-      id: detailId,
-      storeId: scope.storeId,
-      saleId,
-      productId: product.id,
-      productName: product.name,
-      quantity: operation.quantity,
-      unitPrice: product.price,
-      subtotal,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const movement: InventoryMovement = {
-      id: movementId,
-      storeId: scope.storeId,
-      productId: product.id,
-      userId: scope.userId,
-      userName: scope.userName || 'Usuario',
-      quantity: operation.quantity,
-      type: 'sale',
-      occurredAt: now,
-      stockBefore: product.stock,
-      stockAfter: product.stock - operation.quantity,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const updatedProduct: Product = {
-      ...product,
-      stock: movement.stockAfter,
-      updatedAt: now,
-    };
-
-    // Guardar la operación localmente para mantener el funcionamiento offline.
-    await this.products.save(updatedProduct);
-    await this.sales.save(sale);
-    await this.saleItems.save(item);
-    await this.movements.save(movement);
-
-    // Una sola operación pendiente representa toda la venta.
-    // No se encolan ventas, detalles y movimientos por separado.
-    await this.enqueue(
-      'sale_transaction',
-      saleId,
-      {
-        saleId,
-        detailId,
-        movementId,
-        storeId: scope.storeId,
-        userId: scope.userId,
-        productId: product.id,
-        quantity: operation.quantity,
-        unitPrice: product.price,
-        channel: operation.channel ?? 'manual',
-        payment: operation.payment ?? 'efectivo',
-      },
-      scope.storeId,
-    );
-
-    // Si hay conexión, intenta sincronizar.
-    // Si falla por conexión, conserva la operación para reintentar.
-    await this.sync(scope.storeId);
-
-    return sale;
   }
+
 
   async pendingCount(storeId: string): Promise<number> {
     return (await this.queue.list(storeId)).length;
   }
 
+  
+  async pendingSaleTransactionCount(storeId: string): Promise<number> {
+    const items = await this.queue.list(storeId);
+
+    return items.filter(
+      (item) => item.entity === 'sale_transaction',
+    ).length;
+  }
+
+
   async sync(storeId: string): Promise<number> {
-    const pendingTransactions = (await this.queue.list(storeId)).filter(
+    
+    const allPendingItems = await this.queue.list(storeId);
+
+    console.log(
+      '[Gwen][Sync] Detalle de la cola:',
+      JSON.stringify(allPendingItems, null, 2),
+    );
+
+    console.log(
+      '[Gwen][Sync] Cola pendiente (sin payload):',
+      allPendingItems.map((item) => ({
+        entity: item.entity,
+        operation: item.operation,
+        entityId: item.entityId,
+        attempts: item.attempts,
+      })),
+    );
+
+    const pendingTransactions = allPendingItems.filter(
       (item) => item.entity === 'sale_transaction',
     );
+
+    console.log(
+      '[Gwen][Sync] Ventas pendientes:',
+      pendingTransactions.length,
+    );
+
 
     for (const item of pendingTransactions) {
       try {
@@ -445,7 +575,11 @@ export class InventoryService {
 
     }
 
-    return this.pendingCount(storeId);
+    const remaining = await this.pendingCount(storeId);
+
+    console.log('[Gwen][Sync] Operaciones pendientes restantes:', remaining);
+
+    return remaining;
   }
 
   private async requireProduct(storeId: string, productId: string): Promise<Product> {

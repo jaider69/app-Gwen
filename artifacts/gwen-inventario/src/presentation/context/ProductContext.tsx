@@ -90,8 +90,18 @@ export function ProductProvider({ children }: PropsWithChildren) {
         setProducts(refreshed.products);
         setCategories(refreshed.categories);
       }
-      setMovements(await inventoryService.listMovements(storeId));
-      setSales(await inventoryService.listSales(storeId));
+      const remoteMovements = await inventoryService.listMovements(storeId);
+
+      console.log('[Gwen][Diagnóstico] Movimientos - tienda:', storeId);
+      console.log('[Gwen][Diagnóstico] Movimientos recibidos:', remoteMovements.length);
+      console.log('[Gwen][Diagnóstico] Primer movimiento:', remoteMovements[0] ?? null);
+
+      setMovements(remoteMovements);
+      const remoteSales = await inventoryService.listSales(storeId);
+      console.log('[Gwen][Diagnóstico] Tienda:', storeId);
+      console.log('[Gwen][Diagnóstico] Ventas recibidas:', remoteSales.length);
+      console.log('[Gwen][Diagnóstico] Primera venta:', remoteSales[0] ?? null);
+      setSales(remoteSales);
       setError(null);
     } catch (caught: unknown) {
       setError(readableError(caught));

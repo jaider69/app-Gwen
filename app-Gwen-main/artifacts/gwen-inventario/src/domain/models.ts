@@ -36,8 +36,8 @@ export interface InventoryMovement extends LocalRecord {
   quantity: number;
   type: 'entry' | 'sale' | 'adjustment';
   occurredAt: string;
-  stockBefore: number;
-  stockAfter: number;
+  stockBefore: number | null;
+  stockAfter: number | null;
   note?: string;
 }
 

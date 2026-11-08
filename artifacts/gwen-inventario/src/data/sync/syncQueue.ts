@@ -32,6 +32,7 @@ export class SyncQueue {
       attempts: 0,
     };
     const nextItems = [...allItems];
+
     if (existingIndex === -1) {
       nextItems.push(queuedItem);
       await this.store.set(QUEUE_KEY, nextItems);
@@ -56,5 +57,30 @@ export class SyncQueue {
       QUEUE_KEY,
       allItems.filter((item) => item.id !== itemId),
     );
+  }
+
+  async removeTestOperations(
+    storeId: string,
+    entityIds: string[],
+  ): Promise<number> {
+    const allItems = (await this.store.get<SyncQueueItem[]>(QUEUE_KEY)) ?? [];
+
+    const nextItems = allItems.filter(
+      (item) =>
+        !(
+          item.storeId === storeId &&
+          entityIds.includes(item.entityId) &&
+          (item.entity === 'category' || item.entity === 'product') &&
+          item.operation === 'create'
+        ),
+    );
+
+    const removedCount = allItems.length - nextItems.length;
+
+    if (removedCount > 0) {
+      await this.store.set(QUEUE_KEY, nextItems);
+    }
+
+    return removedCount;
   }
 }

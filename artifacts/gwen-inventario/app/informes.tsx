@@ -105,7 +105,7 @@ export default function InformesScreen() {
             </Text>
           </View>
         ) : (
-          completedSales.slice(-5).reverse().map((sale) => (
+          completedSales.slice(0, 5).map((sale) => (
             <View key={sale.id} style={styles.saleRow}>
               <View style={styles.saleIcon}>
                 <Feather

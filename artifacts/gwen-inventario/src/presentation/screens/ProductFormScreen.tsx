@@ -11,7 +11,18 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'react-native';
 
+import {
+  assignSharedProductImage,
+  isRemoteProductAvailable,
+  listSharedProductImages,
+  pickProductImageFromGallery,
+  takeProductImageWithCamera,
+  uploadStoreProductImage,
+  type ProductCatalogImage,
+} from '@/src/services/products/productImageService';
+import { useAuth } from '@/src/presentation/context/AuthContext';
 import { AppBackground } from '@/components/AppBackground';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import colors from '@/constants/colors';
@@ -21,6 +32,7 @@ import type { ProductDraft } from '@/src/services/products/productService';
 
 const G = colors.brand;
 const SURFACE = colors.light;
+
 
 const EMPTY_DRAFT: ProductDraft = {
   name: '',
@@ -47,7 +59,18 @@ export default function ProductFormScreen({ productId }: { productId?: string })
     updateProduct,
     createCategory,
     clearError,
+    refreshProducts,
   } = useProducts();
+
+  const { session } = useAuth();
+  const storeId = session?.storeId ?? null;
+
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const [selectedImageMimeType, setSelectedImageMimeType] = useState<string | null>(null);
+  const [selectedCatalogImageId, setSelectedCatalogImageId] = useState<string | null>(null);
+  const [catalogImages, setCatalogImages] = useState<ProductCatalogImage[]>([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [savingImage, setSavingImage] = useState(false);
   const product = useMemo(() => products.find((item) => item.id === productId), [productId, products]);
   const [draft, setDraft] = useState<ProductDraft>(EMPTY_DRAFT);
   const [newCategory, setNewCategory] = useState('');
@@ -65,10 +88,50 @@ export default function ProductFormScreen({ productId }: { productId?: string })
 
   const isEditing = Boolean(productId);
 
+  useEffect(() => {
+  let cancelled = false;
+
+  async function loadCatalogImages() {
+    setLoadingCatalog(true);
+
+    try {
+      const images = await listSharedProductImages();
+
+      if (!cancelled) {
+        setCatalogImages(images);
+      }
+    } catch {
+      if (!cancelled) {
+        setCatalogImages([]);
+      }
+    } finally {
+      if (!cancelled) {
+        setLoadingCatalog(false);
+      }
+    }
+  }
+
+  void loadCatalogImages();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
   function updateField<Key extends keyof ProductDraft>(key: Key, value: ProductDraft[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
     if (error) clearError();
   }
+
+  function selectCatalogImage(image: ProductCatalogImage) {
+  setSelectedCatalogImageId(image.id);
+  setSelectedImageUri(image.url);
+  setSelectedImageMimeType(null);
+  setDraft((current) => ({
+    ...current,
+    image: image.url,
+  }));
+}
 
   function formatDateInput(value: string): string {
     const digits = value.replace(/\D/g, '').slice(0, 8);
@@ -78,18 +141,103 @@ export default function ProductFormScreen({ productId }: { productId?: string })
     return [year, month, day].filter(Boolean).join('-');
   }
 
+
   async function submit() {
+    let savedProduct: Product;
+
     try {
       if (isEditing && productId) {
-        await updateProduct(productId, draft);
+        savedProduct = await updateProduct(productId, draft);
       } else {
-        await createProduct(draft);
+        savedProduct = await createProduct(draft);
       }
-      router.replace('/products');
     } catch {
-      // The context exposes the validation message directly below the form.
+      // El contexto muestra el error de validación debajo del formulario.
+      return;
+    }
+
+    // Si no se eligió una imagen nueva, conserva el flujo normal.
+    if (!selectedCatalogImageId && !selectedImageUri) {
+      router.replace('/products');
+      return;
+    }
+
+    // El producto puede haberse guardado localmente, sin existir aún
+    // en Supabase. En ese caso no intentamos subir ni asignar la imagen.
+    if (!storeId) {
+      Alert.alert(
+        'Producto guardado',
+        'No se encontró la tienda de la sesión para guardar la imagen en línea.',
+      );
+      router.replace('/products');
+      return;
+    }
+
+    setSavingImage(true);
+
+    try {
+      const remoteCheckStartedAt = Date.now();
+      const existsRemotely = await isRemoteProductAvailable(savedProduct.id);
+
+      console.log(
+        `[Gwen][Tiempo] Comprobación producto remoto: ${Date.now() - remoteCheckStartedAt} ms`,
+      );
+
+      if (!existsRemotely) {
+        Alert.alert(
+          'Producto guardado',
+          'La imagen se conserva en el registro local, pero no se puede subir a Supabase hasta que el producto exista en el catálogo remoto.',
+        );
+        router.replace('/products');
+        return;
+      }
+
+      if (selectedCatalogImageId) {
+        const imageStartedAt = Date.now();
+
+        await assignSharedProductImage(
+          storeId,
+          savedProduct.id,
+          selectedCatalogImageId,
+          true,
+        );
+
+        console.log(
+          `[Gwen][Tiempo] Asignación imagen catálogo: ${Date.now() - imageStartedAt} ms`,
+        );
+      } else if (selectedImageUri) {
+        const imageStartedAt = Date.now();
+
+        await uploadStoreProductImage(
+          storeId,
+          savedProduct.id,
+          selectedImageUri,
+          selectedImageMimeType,
+        );
+
+        console.log(
+          `[Gwen][Tiempo] Subida imagen propia: ${Date.now() - imageStartedAt} ms`,
+        );
+      }
+
+      await refreshProducts();
+      router.replace('/products');
+    } catch (imageError) {
+      const message =
+        imageError instanceof Error
+          ? imageError.message
+          : 'No fue posible guardar la imagen en línea.';
+
+      Alert.alert(
+        'Producto guardado, imagen pendiente',
+        `${message}\n\nPuedes volver a editar el producto e intentarlo de nuevo.`,
+      );
+      router.replace('/products');
+    } finally {
+      setSavingImage(false);
     }
   }
+
 
   async function addCategory() {
     try {
@@ -153,6 +301,127 @@ export default function ProductFormScreen({ productId }: { productId?: string })
         </View>
 
         <View style={[styles.sectionCard, { backgroundColor: SURFACE.card }]}>
+          <Text style={[styles.sectionTitle, { color: SURFACE.cardForeground }]}>
+            Imagen del producto
+          </Text>
+
+          {selectedImageUri ? (
+            <Image
+              source={{ uri: selectedImageUri }}
+              style={styles.productImagePreview}
+              resizeMode="contain"
+            />
+          ) : product?.image ? (
+            <Image
+              source={{ uri: product.image }}
+              style={styles.productImagePreview}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={[styles.productImagePlaceholder, { backgroundColor: SURFACE.secondary }]}>
+              <Feather name="image" size={36} color={SURFACE.mutedForeground} />
+              <Text style={[styles.helper, { color: SURFACE.mutedForeground }]}>
+                No has seleccionado una imagen
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.imageActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={async () => {
+                const picked = await pickProductImageFromGallery();
+                if (picked) {
+                  setSelectedImageUri(picked.uri);
+                  setSelectedImageMimeType(picked.mimeType);
+                  setSelectedCatalogImageId(null);
+                  setDraft((current) => ({
+                    ...current,
+                    image: picked.uri,
+                  }));
+                }
+              }}
+              style={[styles.imageActionButton, { backgroundColor: SURFACE.secondary }]}
+            >
+              <Feather name="image" size={18} color={SURFACE.primary} />
+              <Text style={[styles.imageActionText, { color: SURFACE.foreground }]}>
+                Galería
+              </Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={async () => {
+                const picked = await takeProductImageWithCamera();
+                if (picked) {
+                  setSelectedImageUri(picked.uri);
+                  setSelectedImageMimeType(picked.mimeType);
+                  setSelectedCatalogImageId(null);
+                  setDraft((current) => ({
+                    ...current,
+                    image: picked.uri,
+                  }));
+                }
+              }}
+              style={[styles.imageActionButton, { backgroundColor: SURFACE.secondary }]}
+            >
+              <Feather name="camera" size={18} color={SURFACE.primary} />
+              <Text style={[styles.imageActionText, { color: SURFACE.foreground }]}>
+                Cámara
+              </Text>
+            </Pressable>
+          </View>
+
+          <Text style={[styles.label, { color: SURFACE.mutedForeground }]}>
+            Catálogo compartido
+          </Text>
+
+          {loadingCatalog ? (
+            <Text style={[styles.helper, { color: SURFACE.mutedForeground }]}>
+              Cargando imágenes…
+            </Text>
+          ) : catalogImages.length === 0 ? (
+            <Text style={[styles.helper, { color: SURFACE.mutedForeground }]}>
+              No hay imágenes compartidas disponibles.
+            </Text>
+          ) : (
+            <View style={styles.catalogGrid}>
+              {catalogImages.map((image) => (
+                <Pressable
+                  key={image.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Seleccionar imagen ${image.name}`}
+                  onPress={() => selectCatalogImage(image)}
+                  style={[
+                    styles.catalogOption,
+                    {
+                      borderColor:
+                        selectedCatalogImageId === image.id
+                          ? SURFACE.primary
+                          : SURFACE.border,
+                      borderWidth: selectedCatalogImageId === image.id ? 2 : 1,
+                    },
+                  ]}
+                >
+                  <Image
+                    source={{ uri: image.url }}
+                    style={styles.catalogImage}
+                    resizeMode="contain"
+                  />
+                  <Text
+                    numberOfLines={2}
+                    style={[styles.catalogImageName, { color: SURFACE.foreground }]}
+                  >
+                    {image.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.sectionCard, { backgroundColor: SURFACE.card }]}>
+          
           <Text style={[styles.sectionTitle, { color: SURFACE.cardForeground }]}>Información básica</Text>
           <Field label="Nombre del producto *" value={draft.name} onChangeText={(value) => updateField('name', value)} placeholder="Ej. Arroz blanco 500 g" />
           <Field label="Marca" value={draft.brand} onChangeText={(value) => updateField('brand', value)} placeholder="Ej. Diana" />
@@ -224,11 +493,19 @@ export default function ProductFormScreen({ productId }: { productId?: string })
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={isEditing ? 'Guardar cambios' : 'Guardar producto'}
-          disabled={saving}
+          disabled={saving || savingImage}
           onPress={submit}
-          style={({ pressed }) => [styles.submit, { backgroundColor: SURFACE.primary, opacity: saving ? 0.45 : pressed ? 0.78 : 1 }]}
+          style={({ pressed }) => [styles.submit, { backgroundColor: SURFACE.primary, opacity: saving || savingImage ? 0.45 : pressed ? 0.78 : 1 }]}
         >
-          <Text style={styles.submitText}>{saving ? 'Guardando…' : isEditing ? 'Guardar cambios' : 'Guardar producto'}</Text>
+          <Text style={styles.submitText}>
+            {savingImage
+              ? 'Guardando imagen…'
+              : saving
+                ? 'Guardando…'
+                : isEditing
+                  ? 'Guardar cambios'
+                  : 'Guardar producto'}
+          </Text>
           <Feather name="check" size={19} color="#FFFFFF" />
         </Pressable>
 
@@ -313,6 +590,7 @@ function toDraft(product: Product): ProductDraft {
     price: product.price,
     minimumStock: product.minimumStock,
     expiresAt: product.expiresAt ?? '',
+    image: product.image,
   };
 }
 
@@ -347,4 +625,54 @@ const styles = StyleSheet.create({
   centerTitle: { fontSize: 20, fontWeight: '700' },
   centerButton: { borderRadius: 14, paddingHorizontal: 17, paddingVertical: 12, marginTop: 5 },
   centerButtonText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
+    productImagePreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: 14,
+  },
+  productImagePlaceholder: {
+    height: 150,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  imageActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  imageActionButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  imageActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  catalogGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  catalogOption: {
+    width: '30%',
+    minHeight: 105,
+    borderRadius: 12,
+    padding: 7,
+    alignItems: 'center',
+    gap: 5,
+  },
+  catalogImage: {
+    width: '100%',
+    height: 65,
+  },
+  catalogImageName: {
+    fontSize: 11,
+    textAlign: 'center',
+  },
 });

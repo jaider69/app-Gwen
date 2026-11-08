@@ -59,6 +59,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
     "expo-dev-client": "~6.0.21",
+    "expo-file-system": "~19.0.24",
     "expo-notifications": "~0.32.17",
     "expo-speech-recognition": "^56.0.1",
     "react-native-url-polyfill": "^4.0.0"

@@ -201,7 +201,7 @@ function ProductRow({
   onPress: () => void;
 }) {
   const health = getProductHealth(product);
-  const image = getProductImage(product);
+  const fallbackImage = getProductImage(product);
   const statusLabel =
     health.status === 'out-of-stock'
       ? 'Agotado'
@@ -218,9 +218,27 @@ function ProductRow({
       onPress={onPress}
       style={({ pressed }) => [styles.productRow, { backgroundColor: SURFACE.card, opacity: pressed ? 0.85 : 1 }]}
     >
-      <View style={[styles.productIcon, { backgroundColor: SURFACE.secondary, overflow: 'hidden' }]}>
-        {image ? (
-          <Image source={image} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+      <View
+        style={[
+          styles.productIcon,
+          {
+            backgroundColor: SURFACE.secondary,
+            overflow: 'hidden',
+          },
+        ]}
+      >
+        {product.image ? (
+          <Image
+            source={{ uri: product.image }}
+            style={{ width: '100%', height: '100%' }}
+            resizeMode="cover"
+          />
+        ) : fallbackImage ? (
+          <Image
+            source={fallbackImage}
+            style={{ width: '100%', height: '100%' }}
+            resizeMode="cover"
+          />
         ) : (
           <Feather name="package" size={19} color={SURFACE.primary} />
         )}

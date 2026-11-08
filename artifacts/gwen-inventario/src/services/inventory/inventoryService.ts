@@ -18,6 +18,11 @@ export type InventoryOperation = {
   payment?: 'efectivo' | 'otro' | 'transferencia';
 };
 
+export type MultipleSaleItem = {
+  productId: string;
+  quantity: number;
+};
+
 function createLocalUuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
     const value = Math.floor(Math.random() * 16);
@@ -120,6 +125,49 @@ class SupabaseInventoryGateway {
 
     return result as Record<string, unknown>;
   }
+
+  async registerMultipleSale(payload: {
+  saleId: string;
+  storeId: string;
+  userId: string;
+  items: Array<{
+    detailId: string;
+    movementId: string;
+    productId: string;
+    quantity: number;
+  }>;
+  channel: 'manual' | 'voz';
+  payment: 'efectivo' | 'otro' | 'transferencia';
+}): Promise<Record<string, unknown>> {
+  const result = await this.request(
+    '/rest/v1/rpc/registrar_venta_multiple_gwen',
+    {
+      method: 'POST',
+      headers: {
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({
+        p_sale_id: payload.saleId,
+        p_store_id: payload.storeId,
+        p_user_id: payload.userId,
+        p_items: payload.items.map((item) => ({
+          detail_id: item.detailId,
+          movement_id: item.movementId,
+          product_id: item.productId,
+          quantity: item.quantity,
+        })),
+        p_channel: payload.channel,
+        p_payment: payload.payment,
+      }),
+    },
+  );
+
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('Supabase devolvió una respuesta inválida al registrar la venta.');
+  }
+
+  return result as Record<string, unknown>;
+}
 
   async getStock(storeId: string, productId: string): Promise<number> {
     const rows = (await this.request(
@@ -445,6 +493,63 @@ export class InventoryService {
     };
   }
 
+  async recordMultipleSale(
+    scope: InventoryScope,
+    items: MultipleSaleItem[],
+  ): Promise<Sale> {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error('Agrega al menos un producto para registrar la venta.');
+    }
+
+    const seenProducts = new Set<string>();
+
+    const validatedItems = items.map((item) => {
+      const productId = item.productId?.trim();
+
+      if (!productId) {
+        throw new Error('Hay un producto inválido en el carrito.');
+      }
+
+      if (seenProducts.has(productId)) {
+        throw new Error('No puedes agregar el mismo producto dos veces.');
+      }
+
+      seenProducts.add(productId);
+
+      const quantity = validateQuantity(item.quantity);
+
+      return {
+        productId,
+        quantity: item.quantity,
+        detailId: createLocalUuid(),
+        movementId: createLocalUuid(),
+      };
+    });
+
+    const saleId = createLocalUuid();
+
+    const result = await this.remote.registerMultipleSale({
+      saleId,
+      storeId: scope.storeId,
+      userId: scope.userId,
+      items: validatedItems,
+      channel: 'manual',
+      payment: 'efectivo',
+    });
+
+    if (result.success !== true) {
+      throw new Error('No fue posible registrar la venta múltiple.');
+    }
+
+    return {
+      id: saleId,
+      storeId: scope.storeId,
+      userId: scope.userId,
+      total: Number(result.total ?? 0),
+      status: 'completed',
+      createdAt: new Date().toISOString(),
+    } as Sale;
+  }
 
   async pendingCount(storeId: string): Promise<number> {
     return (await this.queue.list(storeId)).length;

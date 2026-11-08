@@ -31,7 +31,10 @@ export default function MovementsScreen() {
   const { filter: filterParam } = useLocalSearchParams<{ filter?: string }>();
   const { movements, products, loading, refresh, pendingCount } = useProducts();
   const [filter, setFilter] = useState<MovementFilter>(isMovementFilter(filterParam) ? filterParam : 'all');
-  const productNames = useMemo(() => new Map(products.map((product) => [product.id, product.name])), [products]);
+  const productById = useMemo(
+  () => new Map(products.map((product) => [product.id, product])),
+  [products],
+);
   const visibleMovements = useMemo(
     () => movements.filter((movement) => filter === 'all' || movement.type === filter),
     [filter, movements],
@@ -92,16 +95,32 @@ export default function MovementsScreen() {
           refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor="#FFFFFF" />}
           contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
           ListEmptyComponent={<EmptyMovements />}
-          renderItem={({ item }) => (
-            <MovementRow movement={item} productName={productNames.get(item.productId) ?? 'Producto eliminado'} />
-          )}
+          renderItem={({ item }) => {
+            const product = productById.get(item.productId);
+
+            return (
+              <MovementRow
+                movement={item}
+                productName={product?.name ?? 'Producto eliminado'}
+                currentStock={product?.stock ?? null}
+              />
+            );
+          }}
         />
       </View>
     </AppBackground>
   );
 }
 
-function MovementRow({ movement, productName }: { movement: InventoryMovement; productName: string }) {
+function MovementRow({
+  movement,
+  productName,
+  currentStock,
+}: {
+  movement: InventoryMovement;
+  productName: string;
+  currentStock: number | null;
+}) {
   const isSale = movement.type === 'sale';
   const accent = isSale ? SURFACE.primary : '#B7791F';
   const typeLabel = movement.type === 'entry' ? 'Entrada' : movement.type === 'sale' ? 'Venta' : 'Ajuste';
@@ -120,7 +139,20 @@ function MovementRow({ movement, productName }: { movement: InventoryMovement; p
           <Text style={[styles.metaText, { color: SURFACE.mutedForeground }]}>{typeLabel} · {formatDateTime(movement.occurredAt)}</Text>
           <Text numberOfLines={1} style={[styles.metaText, { color: SURFACE.mutedForeground }]}>Por {movement.userName || 'Usuario'}</Text>
         </View>
-        <Text style={[styles.stockAfter, { color: SURFACE.mutedForeground }]}>Stock: {movement.stockBefore} → {movement.stockAfter}</Text>
+        {movement.stockBefore != null && movement.stockAfter != null ? (
+  <Text style={[styles.stockAfter, { color: SURFACE.mutedForeground }]}>
+    Stock: {movement.stockBefore} → {movement.stockAfter}
+  </Text>
+) : currentStock != null ? (
+  <Text style={[styles.stockAfter, { color: SURFACE.mutedForeground }]}>
+    Stock actual de referencia: {currentStock}
+  </Text>
+) : (
+  <Text style={[styles.stockAfter, { color: SURFACE.mutedForeground }]}>
+    Stock anterior y posterior no disponibles
+  </Text>
+)}
+
       </View>
     </View>
   );

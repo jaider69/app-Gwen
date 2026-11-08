@@ -3,6 +3,7 @@ import { LOCAL_TABLES } from '@/src/data/database/schema';
 import { LocalJsonRepository } from '@/src/data/repositories/localJsonRepository';
 import { SyncQueue } from '@/src/data/sync/syncQueue';
 import type { Category, Product } from '@/src/domain/models';
+import { supabase } from '@/src/data/supabase/supabaseClient';
 
 export const DEFAULT_CATEGORIES = [
   'Bebidas',
@@ -28,6 +29,7 @@ export type ProductDraft = {
   price: number;
   minimumStock: number;
   expiresAt?: string;
+  image?: string;
 };
 
 export type ProductStatus = 'normal' | 'low-stock' | 'out-of-stock' | 'expiring';
@@ -161,17 +163,22 @@ class SupabaseProductGateway {
 
     const encodedStoreId = encodeURIComponent(storeId);
 
-    const [categoryRows, productRows, inventoryRows] = await Promise.all([
+    
+    const [categoryRows, productRows, inventoryRows, imageRows] = await Promise.all([
       this.request(
         '/rest/v1/categorias?select=id_categoria,nombre',
       ),
       this.request(
-        '/rest/v1/productos?activo=eq.true&select=id_producto,id_categoria,nombre,unidad_medida,precio_referencia,activo',
+        '/rest/v1/productos?activo=eq.true&select=id_producto,id_categoria,nombre,marca,unidad_medida,precio_referencia,activo',
       ),
       this.request(
         `/rest/v1/inventario?id_tienda=eq.${encodedStoreId}&select=id_tienda,id_producto,stock_actual,stock_minimo,actualizado_en`,
       ),
+      this.request(
+        `/rest/v1/imagenes_producto_tienda?id_tienda=eq.${encodedStoreId}&select=id_producto,url_publica`,
+      ),
     ]);
+
 
     type CategoryRow = {
       id_categoria: string;
@@ -182,6 +189,7 @@ class SupabaseProductGateway {
       id_producto: string;
       id_categoria: string | null;
       nombre: string;
+      marca: string | null;
       unidad_medida: string | null;
       precio_referencia: number | string | null;
       activo: boolean;
@@ -194,10 +202,23 @@ class SupabaseProductGateway {
       stock_minimo: number | string | null;
       actualizado_en: string | null;
     };
+      
+    type ProductImageRow = {
+        id_producto: string;
+        url_publica: string | null;
+    };
 
     const remoteCategories = categoryRows as CategoryRow[];
     const remoteProducts = productRows as ProductRow[];
     const remoteInventory = inventoryRows as InventoryRow[];
+
+    const remoteImages = imageRows as ProductImageRow[];
+
+    const imageByProduct = new Map(
+      remoteImages
+        .filter((row) => Boolean(row.url_publica))
+        .map((row) => [row.id_producto, row.url_publica as string]),
+    );
 
     const inventoryByProduct = new Map(
       remoteInventory.map((row) => [row.id_producto, row]),
@@ -232,7 +253,8 @@ class SupabaseProductGateway {
           id: row.id_producto,
           storeId,
           name: row.nombre,
-          brand: '',
+          brand: row.marca ?? '',
+          image: imageByProduct.get(row.id_producto),
           categoryId: row.id_categoria ?? '',
           unit: row.unidad_medida || 'unidad',
           stock: Number(inventory.stock_actual ?? 0),
@@ -404,14 +426,81 @@ export class ProductService {
     return this.products.get(storeId, id);
   }
 
-  async save(storeId: string, draft: ProductDraft, accessToken?: string, id?: string): Promise<Product> {
-    if (!storeId) throw new Error('El producto debe pertenecer a una tienda válida.');
+
+  async save(
+    storeId: string,
+    draft: ProductDraft,
+    accessToken?: string,
+    id?: string,
+  ): Promise<Product> {
+    if (!storeId) {
+      throw new Error('El producto debe pertenecer a una tienda válida.');
+    }
+
+    if (!accessToken) {
+      throw new Error('Debes iniciar sesión para guardar el producto.');
+    }
+
     const validationError = validateProductDraft(draft);
     if (validationError) throw new Error(validationError);
+
+    const localReadStartedAt = Date.now();
     const existing = id ? await this.products.get(storeId, id) : null;
+
+    console.log(
+      `[Gwen][Tiempo] Lectura local del producto: ${Date.now() - localReadStartedAt} ms`,
+    );
     const now = new Date().toISOString();
+
+    const payload = {
+      p_store_id: storeId,
+      p_category_id: draft.categoryId,
+      p_name: draft.name.trim(),
+      p_brand: draft.brand.trim(),
+      p_unit: draft.unit.trim() || 'unidad',
+      p_price: draft.price,
+      p_stock: draft.stock,
+      p_minimum_stock: draft.minimumStock,
+    };
+
+    let remoteId: string;
+    const remoteSaveStartedAt = Date.now();
+
+    try {
+      if (id) {
+        const { data, error } = await supabase.rpc('editar_producto_gwen', {
+          ...payload,
+          p_product_id: id,
+        });
+
+        if (error) {
+          throw new Error(`No se pudo editar el producto: ${error.message}`);
+        }
+
+        const result = data as { id_producto?: string } | null;
+        remoteId = result?.id_producto ?? id;
+      } else {
+        const { data, error } = await supabase.rpc('crear_producto_gwen', payload);
+
+        if (error) {
+          throw new Error(`No se pudo crear el producto: ${error.message}`);
+        }
+
+        const result = data as { id_producto?: string } | null;
+        if (!result?.id_producto) {
+          throw new Error('Supabase no devolvió el identificador del producto creado.');
+        }
+
+        remoteId = result.id_producto;
+      }
+    } finally {
+      console.log(
+        `[Gwen][Tiempo] Guardado Supabase (${id ? 'edición' : 'creación'}): ${Date.now() - remoteSaveStartedAt} ms`,
+      );
+    }
+
     const product: Product = {
-      id: existing?.id ?? createLocalUuid(),
+      id: remoteId,
       storeId,
       name: draft.name.trim(),
       brand: draft.brand.trim(),
@@ -422,20 +511,20 @@ export class ProductService {
       price: draft.price,
       minimumStock: draft.minimumStock,
       expiresAt: normalizeDate(draft.expiresAt),
+      image: draft.image ?? existing?.image,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
+
+    const localSaveStartedAt = Date.now();
     await this.products.save(product);
-    await this.queue.enqueue({
-      storeId,
-      entity: 'product',
-      entityId: product.id,
-      operation: existing ? 'update' : 'create',
-      payload: productPayload(product),
-    });
-    if (accessToken) await this.sync(storeId);
+
+    console.log(
+      `[Gwen][Tiempo] Escritura local del producto: ${Date.now() - localSaveStartedAt} ms`,
+    );
     return product;
   }
+
 
   async remove(storeId: string, id: string, accessToken?: string): Promise<void> {
     const existing = await this.products.get(storeId, id);
@@ -483,14 +572,35 @@ export class ProductService {
   }
 
   
-  async sync(storeId: string): Promise<number> {
+    async sync(storeId: string): Promise<number> {
     if (!storeId) {
       throw new Error('No se encontró una tienda para sincronizar.');
     }
 
-    // Modo seguro temporal:
-    // no envía ni elimina registros de Supabase.
-    // La lectura remota se realiza en list().
+    const testOperationIds = [
+      '5888031c-4b2b-4b11-b983-95b17e6b5710',
+      'b98eed60-ac59-4b85-aef9-2097629e5fa5',
+      'd16471ec-7e32-4844-96e1-8a920e2de811',
+      '088dff40-999e-44e2-a92e-2ec3168e860c',
+      'd4777513-8933-4c27-86c5-ba9030f1d155',
+      'f49329fc-9f20-40b9-b610-817e38c30179',
+      '0665f918-b5e2-4aa1-ad88-88730f8cf74b',
+      '48c65f12-c56d-4b67-9b71-933499df74fb',
+      '4c9f864f-240e-4184-8e05-f58e2c60e23d',
+      '3b635923-5557-4381-bbc6-af3a39563c0b',
+    ];
+
+    const removedCount = await this.queue.removeTestOperations(
+      storeId,
+      testOperationIds,
+    );
+
+    if (removedCount > 0) {
+      console.log(
+        `[Gwen][Sync] Operaciones de prueba eliminadas: ${removedCount}`,
+      );
+    }
+
     return this.pendingCount(storeId);
   }
 

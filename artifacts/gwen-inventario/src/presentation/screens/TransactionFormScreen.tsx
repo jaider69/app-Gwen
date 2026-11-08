@@ -23,6 +23,11 @@ const SURFACE = colors.light;
 
 type TransactionMode = 'entry' | 'sale';
 
+type CartItem = {
+  productId: string;
+  quantity: number;
+};
+
 export default function TransactionFormScreen({ mode }: { mode: TransactionMode }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -33,10 +38,13 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
     error,
     recordEntry,
     recordSale,
+    recordMultipleSale,
     clearError,
   } = useProducts();
   const [selectedProductId, setSelectedProductId] = useState('');
   const [quantityText, setQuantityText] = useState('');
+  const [cart, setCart] = useState<CartItem[]>([]);
+const [cartError, setCartError] = useState('');
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId),
     [products, selectedProductId],
@@ -53,20 +61,114 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
     if (error) clearError();
   }
 
-  async function submit() {
-    if (!selectedProduct) {
-      return;
-    }
-    try {
-      if (mode === 'entry') await recordEntry(selectedProduct.id, quantity);
-      else await recordSale(selectedProduct.id, quantity);
-      router.replace('/dashboard');
-    } catch {
-      // The context error is shown in the form.
-    }
+  function addToCart() {
+  if (!selectedProduct) {
+    setCartError('Selecciona un producto.');
+    return;
   }
 
+  if (quantity <= 0) {
+    setCartError('Ingresa una cantidad válida.');
+    return;
+  }
+
+  const existingItem = cart.find(
+    (item) => item.productId === selectedProduct.id,
+  );
+
+  const newQuantity = (existingItem?.quantity ?? 0) + quantity;
+
+  if (newQuantity > selectedProduct.stock) {
+    setCartError(
+      `Solo tienes ${selectedProduct.stock} unidades disponibles de ${selectedProduct.name}.`,
+    );
+    return;
+  }
+
+  setCart((current) => {
+    const exists = current.some(
+      (item) => item.productId === selectedProduct.id,
+    );
+
+    if (exists) {
+      return current.map((item) =>
+        item.productId === selectedProduct.id
+          ? { ...item, quantity: item.quantity + quantity }
+          : item,
+      );
+    }
+
+    return [
+      ...current,
+      {
+        productId: selectedProduct.id,
+        quantity,
+      },
+    ];
+  });
+
+  setCartError('');
+  setQuantityText('');
+}
+
+function changeCartQuantity(productId: string, quantity: number) {
+  const product = products.find((item) => item.id === productId);
+
+  if (!product || quantity < 1 || quantity > product.stock) {
+    return;
+  }
+
+  setCart((current) =>
+    current.map((item) =>
+      item.productId === productId ? { ...item, quantity } : item,
+    ),
+  );
+
+  setCartError('');
+}
+
+function removeFromCart(productId: string) {
+  setCart((current) =>
+    current.filter((item) => item.productId !== productId),
+  );
+
+  setCartError('');
+}
+
+const cartTotal = cart.reduce((sum, item) => {
+  const product = products.find((product) => product.id === item.productId);
+  return sum + (product ? product.price * item.quantity : 0);
+}, 0);
+
+  async function submit() {
+  try {
+    if (mode === 'entry') {
+      if (!selectedProduct || quantity <= 0) return;
+
+      await recordEntry(selectedProduct.id, quantity);
+    } else {
+      if (cart.length === 0) {
+        setCartError('Agrega al menos un producto al carrito.');
+        return;
+      }
+
+      await recordMultipleSale(cart);
+    }
+
+    router.replace('/dashboard');
+  } catch {
+    // El contexto muestra el error en el formulario.
+  }
+}
+
   const isEntry = mode === 'entry';
+
+  const submitDisabled =
+    saving ||
+    (isEntry
+      ? !selectedProduct || quantity <= 0
+      : cart.length === 0);
+  
   return (
     <AppBackground>
       <KeyboardAwareScrollViewCompat
@@ -156,13 +258,116 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
               </View>
             </View>
 
-            <View style={[styles.summary, { backgroundColor: SURFACE.card }]}>
-              <SummaryRow label="Producto" value={selectedProduct?.name ?? '—'} />
-              <SummaryRow label="Stock anterior" value={selectedProduct ? `${selectedProduct.stock} ${selectedProduct.unit}` : '—'} />
-              <SummaryRow label={isEntry ? 'Stock nuevo' : 'Stock después de la venta'} value={selectedProduct ? `${isEntry ? selectedProduct.stock + quantity : Math.max(0, selectedProduct.stock - quantity)} ${selectedProduct.unit}` : '—'} emphasis />
-              {!isEntry ? <SummaryRow label="Precio fijo" value={selectedProduct ? formatCurrency(selectedProduct.price) : '—'} /> : null}
-              {!isEntry ? <SummaryRow label="Total de la venta" value={formatCurrency(total)} emphasis /> : null}
-            </View>
+            {!isEntry ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={addToCart}
+                style={({ pressed }) => [
+                  styles.addCartButton,
+                  { opacity: pressed ? 0.75 : 1 },
+                ]}
+              >
+                <Feather name="plus-circle" size={19} color="#FFFFFF" />
+                <Text style={styles.submitText}>Agregar al carrito</Text>
+              </Pressable>
+            ) : null}
+
+            {isEntry ? (
+              <View style={[styles.summary, { backgroundColor: SURFACE.card }]}>
+                <SummaryRow label="Producto" value={selectedProduct?.name ?? '—'} />
+                <SummaryRow
+                  label="Stock anterior"
+                  value={selectedProduct ? `${selectedProduct.stock} ${selectedProduct.unit}` : '—'}
+                />
+                <SummaryRow
+                  label="Stock nuevo"
+                  value={selectedProduct ? `${selectedProduct.stock + quantity} ${selectedProduct.unit}` : '—'}
+                  emphasis
+                />
+              </View>
+            ) : (
+              <View style={[styles.cartCard, { backgroundColor: SURFACE.card }]}>
+                <View style={styles.cartHeader}>
+                  <Text style={[styles.sectionTitle, { color: SURFACE.cardForeground }]}>
+                    Tu carrito
+                  </Text>
+                  <Text style={[styles.cartCount, { color: SURFACE.mutedForeground }]}>
+                    {cart.length} productos
+                  </Text>
+                </View>
+
+                {cart.length === 0 ? (
+                  <Text style={[styles.cartEmpty, { color: SURFACE.mutedForeground }]}>
+                    Todavía no has agregado productos.
+                  </Text>
+                ) : (
+                  cart.map((item) => {
+                    const product = products.find(
+                      (product) => product.id === item.productId,
+                    );
+
+                    if (!product) return null;
+
+                    return (
+                      <View key={item.productId} style={styles.cartItem}>
+                        <View style={styles.cartItemInfo}>
+                          <Text style={[styles.cartProductName, { color: SURFACE.cardForeground }]}>
+                            {product.name}
+                          </Text>
+                          <Text style={[styles.cartSubtotal, { color: SURFACE.primary }]}>
+                            {formatCurrency(product.price * item.quantity)}
+                          </Text>
+                          <Text style={[styles.cartUnitPrice, { color: SURFACE.mutedForeground }]}>
+                            {formatCurrency(product.price)} por {product.unit}
+                          </Text>
+                        </View>
+
+                        <View style={styles.cartActions}>
+                          <Pressable
+                            accessibilityLabel={`Disminuir cantidad de ${product.name}`}
+                            onPress={() => changeCartQuantity(item.productId, item.quantity - 1)}
+                            disabled={item.quantity <= 1}
+                            style={styles.quantityButton}
+                          >
+                            <Feather name="minus" size={15} color={SURFACE.primary} />
+                          </Pressable>
+
+                          <Text style={[styles.cartQuantity, { color: SURFACE.cardForeground }]}>
+                            {item.quantity}
+                          </Text>
+
+                          <Pressable
+                            accessibilityLabel={`Aumentar cantidad de ${product.name}`}
+                            onPress={() => changeCartQuantity(item.productId, item.quantity + 1)}
+                            disabled={item.quantity >= product.stock}
+                            style={styles.quantityButton}
+                          >
+                            <Feather name="plus" size={15} color={SURFACE.primary} />
+                          </Pressable>
+
+                          <Pressable
+                            accessibilityLabel={`Eliminar ${product.name} del carrito`}
+                            onPress={() => removeFromCart(item.productId)}
+                            style={styles.removeButton}
+                          >
+                            <Feather name="trash-2" size={17} color={SURFACE.destructive} />
+                          </Pressable>
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+
+                <View style={styles.cartTotal}>
+                  <Text style={[styles.cartTotalLabel, { color: SURFACE.cardForeground }]}>
+                    Total de la venta
+                  </Text>
+                  <Text style={[styles.cartTotalValue, { color: SURFACE.primary }]}>
+                    {formatCurrency(cartTotal)}
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {error ? (
               <View style={[styles.errorBox, { backgroundColor: '#FCEBEB' }]}>
@@ -171,14 +376,23 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
               </View>
             ) : null}
 
+            {cartError ? (
+              <View style={[styles.errorBox, { backgroundColor: '#FCEBEB' }]}>
+                <Feather name="alert-circle" size={17} color={SURFACE.destructive} />
+                <Text style={[styles.errorText, { color: SURFACE.destructive }]}>
+                  {cartError}
+                </Text>
+              </View>
+            ) : null}
+
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={isEntry ? 'Confirmar entrada' : 'Confirmar venta'}
-              disabled={saving || !selectedProduct || quantity <= 0}
+              disabled={submitDisabled}
               onPress={submit}
               style={({ pressed }) => [
                 styles.submit,
-                { backgroundColor: SURFACE.primary, opacity: saving || !selectedProduct || quantity <= 0 ? 0.45 : pressed ? 0.78 : 1 },
+                { backgroundColor: SURFACE.primary, opacity: submitDisabled ? 0.45 : pressed ? 0.78 : 1 },
               ]}
             >
               <Text style={styles.submitText}>{saving ? 'Guardando…' : isEntry ? 'Confirmar entrada' : 'Confirmar venta'}</Text>
@@ -279,4 +493,98 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 13, lineHeight: 19, textAlign: 'center' },
   emptyButton: { borderRadius: 14, paddingHorizontal: 16, paddingVertical: 11, marginTop: 4 },
   emptyButtonText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
+    addCartButton: {
+    minHeight: 50,
+    borderRadius: 15,
+    paddingHorizontal: 16,
+    backgroundColor: SURFACE.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+  },
+  cartCard: {
+    borderRadius: 18,
+    padding: 15,
+    gap: 14,
+  },
+  cartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cartCount: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cartEmpty: {
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 15,
+  },
+  cartItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: SURFACE.border,
+  },
+  cartItemInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  cartProductName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  cartSubtotal: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  cartUnitPrice: {
+    fontSize: 11,
+  },
+  cartActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  quantityButton: {
+    width: 29,
+    height: 29,
+    borderRadius: 9,
+    backgroundColor: SURFACE.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartQuantity: {
+    minWidth: 18,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  removeButton: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartTotal: {
+    borderTopWidth: 1,
+    borderTopColor: SURFACE.border,
+    paddingTop: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cartTotalLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  cartTotalValue: {
+    fontSize: 19,
+    fontWeight: '800',
+  },
 });

@@ -106,7 +106,7 @@ export function parseVoiceCommand(transcript: string, products: Product[]): Voic
     return { kind: 'navigate', destination: '/movements' };
   }
 
-  if (/^(abrir|mostrar|muestrame|ver|ir a|llevame a)\s+(el\s+)?inventario$/.test(text)) {
+  if (/^(abre|abrir|mostrar|muestrame|ver|ir a|llevame a)\s+(el\s+)?inventario$/.test(text)) {
     return { kind: 'navigate', destination: '/products' };
   }
 
@@ -115,11 +115,26 @@ export function parseVoiceCommand(transcript: string, products: Product[]): Voic
   }
 
 
-  if (/que productos tienen (poco stock|stock bajo)|productos con (poco stock|stock bajo)/.test(text)) {
+  if (
+    /^(muestrame|mostrar|ver|dime|consulta)\s+(los?\s+)?productos\s+con\s+(poco\s+stock|stock\s+bajo|bajo\s+stock)$/.test(text) ||
+    /^(que productos tienen|productos con)\s+(poco stock|stock bajo|bajo stock)$/.test(text)
+  ) {
     return { kind: 'query', query: 'low-stock', productCandidates: [] };
   }
   if (/que productos estan agotados|productos agotados|que esta agotado/.test(text)) {
     return { kind: 'query', query: 'out-of-stock', productCandidates: [] };
+  }
+
+  const showStockMatch = text.match(
+    /^(muestrame|mostrar|ver|dime|consulta)\s+(el\s+)?stock\s+de\s+(.+)$/
+  );
+
+  if (showStockMatch) {
+    return {
+      kind: 'query',
+      query: 'stock',
+      productCandidates: findProducts(showStockMatch[3], products),
+    };
   }
 
   const stockMatch = text.match(/cuantas?\s+(.+?)\s+tengo/);
@@ -127,7 +142,7 @@ export function parseVoiceCommand(transcript: string, products: Product[]): Voic
     return { kind: 'query', query: 'stock', productCandidates: findProducts(stockMatch[1], products) };
   }
 
-  const saleMatch = text.match(/(?:vendi|vender|venta)\s*(.*)/);
+  const saleMatch = text.match(/(?:vende|vendi|vender|venta)\s*(.*)/);
   if (saleMatch) {
     return parseOperation('sale', saleMatch[1], products);
   }

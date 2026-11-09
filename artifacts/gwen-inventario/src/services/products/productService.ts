@@ -25,6 +25,8 @@ export type ProductDraft = {
   categoryId: string;
   supplier?: string;
   unit: string;
+  presentationQuantity?: number;
+  presentationUnit?: string;
   stock: number;
   price: number;
   minimumStock: number;

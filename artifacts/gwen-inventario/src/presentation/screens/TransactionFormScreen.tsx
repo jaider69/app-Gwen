@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Platform,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -44,7 +45,26 @@ export default function TransactionFormScreen({ mode }: { mode: TransactionMode 
   const [selectedProductId, setSelectedProductId] = useState('');
   const [quantityText, setQuantityText] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
-const [cartError, setCartError] = useState('');
+  const [cartError, setCartError] = useState('');
+  const [productSearch, setProductSearch] = useState('');
+
+  // Función auxiliar para quitar tildes y minúsculas y hacer una búsqueda flexible
+  const normalizeText = (text: string) => {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  };
+
+  const filteredProducts = useMemo(() => {
+    const query = normalizeText(productSearch.trim());
+    if (!query) return products;
+    return products.filter((p) => {
+      const nameNorm = normalizeText(p.name);
+      const brandNorm = normalizeText(p.brand);
+      return nameNorm.includes(query) || brandNorm.includes(query);
+    });
+  }, [products, productSearch]);
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId),
     [products, selectedProductId],
@@ -225,15 +245,40 @@ const cartTotal = cart.reduce((sum, item) => {
           <>
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: G.onGradientText }]}>1. Selecciona el producto</Text>
+              
+              {/* BARRA DE BÚSQUEDA RÁPIDA DE PRODUCTOS */}
+              <View style={[styles.searchBox, { backgroundColor: SURFACE.card }]}>
+                <Feather name="search" size={16} color={SURFACE.mutedForeground} />
+                <TextInput
+                  accessibilityLabel="Buscar producto en la lista"
+                  value={productSearch}
+                  onChangeText={setProductSearch}
+                  placeholder="Buscar producto por nombre o marca..."
+                  placeholderTextColor={SURFACE.mutedForeground}
+                  style={[styles.searchInput, { color: SURFACE.foreground }]}
+                />
+                {productSearch ? (
+                  <Pressable accessibilityLabel="Limpiar búsqueda" onPress={() => setProductSearch('')}>
+                    <Feather name="x-circle" size={16} color={SURFACE.mutedForeground} />
+                  </Pressable>
+                ) : null}
+              </View>
+
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.productPicker}>
-                {products.map((product) => (
-                  <ProductOption
-                    key={product.id}
-                    product={product}
-                    selected={product.id === selectedProductId}
-                    onPress={() => setSelectedProductId(product.id)}
-                  />
-                ))}
+                {filteredProducts.length > 0 ? (
+                  filteredProducts.map((product) => (
+                    <ProductOption
+                      key={product.id}
+                      product={product}
+                      selected={product.id === selectedProductId}
+                      onPress={() => setSelectedProductId(product.id)}
+                    />
+                  ))
+                ) : (
+                  <Text style={[styles.noResultsText, { color: G.onGradientTextMuted }]}>
+                    No se encontraron productos con ese nombre
+                  </Text>
+                )}
               </ScrollView>
             </View>
 
@@ -310,6 +355,15 @@ const cartTotal = cart.reduce((sum, item) => {
 
                     return (
                       <View key={item.productId} style={styles.cartItem}>
+                        {product.image ? (
+                          <Image
+                            source={{ uri: product.image }}
+                            style={styles.cartProductImage}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <Feather name="package" size={22} color={SURFACE.primary} />
+                        )}
                         <View style={styles.cartItemInfo}>
                           <Text style={[styles.cartProductName, { color: SURFACE.cardForeground }]}>
                             {product.name}
@@ -424,7 +478,15 @@ function ProductOption({
         { backgroundColor: selected ? SURFACE.primary : SURFACE.card },
       ]}
     >
-      <Feather name="package" size={17} color={selected ? '#FFFFFF' : SURFACE.primary} />
+      {product.image ? (
+        <Image
+          source={{ uri: product.image }}
+          style={styles.productOptionImage}
+          resizeMode="contain"
+        />
+      ) : (
+        <Feather name="package" size={17} color={selected ? '#FFFFFF' : SURFACE.primary} />
+      )}
       <Text numberOfLines={1} style={[styles.productOptionName, { color: selected ? '#FFFFFF' : SURFACE.cardForeground }]}>{product.name}</Text>
       <Text style={[styles.productOptionStock, { color: selected ? 'rgba(255,255,255,0.85)' : SURFACE.mutedForeground }]}>{product.stock} disponibles</Text>
     </Pressable>
@@ -471,8 +533,16 @@ const styles = StyleSheet.create({
   introText: { fontSize: 12, lineHeight: 18 },
   section: { gap: 11 },
   sectionTitle: { fontSize: 17, fontWeight: '700' },
+  searchBox: { height: 44, borderRadius: 14, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchInput: { flex: 1, fontSize: 13, paddingVertical: 0 },
+  noResultsText: { fontSize: 13, fontStyle: 'italic', paddingVertical: 10 },
   productPicker: { gap: 9, paddingVertical: 2 },
   productOption: { width: 150, minHeight: 105, borderRadius: 17, padding: 12, gap: 7 },
+  productOptionImage: {
+  width: 42,
+  height: 42,
+  borderRadius: 10,
+  },
   productOptionName: { fontSize: 13, fontWeight: '700' },
   productOptionStock: { fontSize: 11 },
   quantityCard: { minHeight: 84, borderRadius: 18, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -530,6 +600,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: SURFACE.border,
+  },
+    cartProductImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
   },
   cartItemInfo: {
     flex: 1,

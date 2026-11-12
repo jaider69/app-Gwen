@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Image, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBackground } from '@/components/AppBackground';
@@ -127,6 +127,7 @@ const visibleMovements = useMemo(() => {
               <MovementRow
                 movement={item}
                 productName={product?.name ?? 'Producto eliminado'}
+                productImage={product?.image}
                 currentStock={product?.stock ?? null}
               />
             );
@@ -140,10 +141,12 @@ const visibleMovements = useMemo(() => {
 function MovementRow({
   movement,
   productName,
+  productImage,
   currentStock,
 }: {
   movement: InventoryMovement;
   productName: string;
+  productImage?: string;
   currentStock: number | null;
 }) {
   const isSale = movement.type === 'sale';
@@ -152,9 +155,17 @@ function MovementRow({
   const sign = movement.type === 'entry' ? '+' : movement.type === 'sale' ? '-' : '';
   return (
     <View style={[styles.row, { backgroundColor: SURFACE.card }]}>
-      <View style={[styles.rowIcon, { backgroundColor: isSale ? SURFACE.secondary : '#FFF5D6' }]}>
-        <Feather name={isSale ? 'shopping-bag' : 'arrow-down-left'} size={18} color={accent} />
-      </View>
+      {productImage ? (
+        <Image
+          source={{ uri: productImage }}
+          style={styles.movementProductImage}
+          resizeMode="contain"
+        />
+      ) : (
+        <View style={[styles.rowIcon, { backgroundColor: isSale ? SURFACE.secondary : '#FFF5D6' }]}>
+          <Feather name={isSale ? 'shopping-bag' : 'arrow-down-left'} size={18} color={accent} />
+        </View>
+      )}
       <View style={styles.rowCopy}>
         <View style={styles.rowTop}>
           <Text numberOfLines={1} style={[styles.productName, { color: SURFACE.cardForeground }]}>{productName}</Text>
@@ -217,6 +228,11 @@ const styles = StyleSheet.create({
   list: { gap: 10 },
   row: { borderRadius: 18, padding: 13, flexDirection: 'row', gap: 11 },
   rowIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  movementProductImage: {
+  width: 48,
+  height: 48,
+  borderRadius: 12,
+  },
   rowCopy: { flex: 1, gap: 5 },
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   productName: { flex: 1, fontSize: 14, fontWeight: '700' },

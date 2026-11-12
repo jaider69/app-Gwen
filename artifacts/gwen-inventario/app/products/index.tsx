@@ -135,32 +135,38 @@ export default function ProductsScreen() {
           ))}
         </View>
 
+        {/* SECCIÓN DE CATEGORÍAS CON TÍTULO Y TEXTO CLARO VISIBLE */}
         {categories.length > 0 ? (
-          <FlatList
-            horizontal
-            data={[{ id: 'all', name: 'Todas' }, ...categories]}
-            keyExtractor={(item) => item.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryList}
-            renderItem={({ item }) => {
-              const active = categoryFilter === item.id || (!categoryFilter && item.id === 'all');
-              return (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Filtrar por ${item.name}`}
-                  onPress={() => setCategoryFilter(item.id === 'all' ? null : item.id)}
-                  style={[
-                    styles.categoryChip,
-                    active
-                      ? { backgroundColor: SURFACE.card }
-                      : { backgroundColor: G.onGradientGlassBg, borderWidth: 1, borderColor: G.onGradientGlassBorder },
-                  ]}
-                >
-                  <Text style={[styles.categoryText, { color: active ? SURFACE.cardForeground : G.onGradientText }]}>{item.name}</Text>
-                </Pressable>
-              );
-            }}
-          />
+          <View style={styles.categoriesSection}>
+            <Text style={styles.categoriesTitle}>Categorías:</Text>
+            <FlatList
+              horizontal
+              data={[{ id: 'all', name: 'Todas' }, ...categories]}
+              keyExtractor={(item) => item.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryList}
+              renderItem={({ item }) => {
+                const active = categoryFilter === item.id || (!categoryFilter && item.id === 'all');
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filtrar por ${item.name}`}
+                    onPress={() => setCategoryFilter(item.id === 'all' ? null : item.id)}
+                    style={[
+                      styles.categoryChip,
+                      active
+                        ? { backgroundColor: SURFACE.card }
+                        : { backgroundColor: G.onGradientGlassBg, borderWidth: 1, borderColor: G.onGradientGlassBorder },
+                    ]}
+                  >
+                    <Text style={[styles.categoryText, { color: active ? SURFACE.cardForeground : '#FFFFFF' }]}>
+                      {item.name}
+                    </Text>
+                  </Pressable>
+                );
+              }}
+            />
+          </View>
         ) : null}
 
         <View style={styles.listHeading}>
@@ -300,9 +306,14 @@ const styles = StyleSheet.create({
   chipsRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
   chip: { borderRadius: 18, paddingHorizontal: 12, paddingVertical: 8 },
   chipText: { fontSize: 12, fontWeight: '700' },
-  categoryList: { gap: 8, paddingVertical: 14 },
-  categoryChip: { borderRadius: 16, paddingHorizontal: 11, paddingVertical: 7 },
-  categoryText: { fontSize: 12, fontWeight: '600' },
+  
+  /* ESTILOS DE CATEGORÍAS */
+  categoriesSection: { marginTop: 12, marginBottom: 4 },
+  categoriesTitle: { fontSize: 13, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
+  categoryList: { gap: 8, paddingVertical: 6 },
+  categoryChip: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+  categoryText: { fontSize: 12, fontWeight: '700' },
+
   listHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   resultTitle: { fontSize: 17, fontWeight: '700' },
   resultSubtext: { fontSize: 12, marginTop: 3 },

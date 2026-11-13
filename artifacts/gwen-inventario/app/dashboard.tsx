@@ -143,6 +143,7 @@ export default function DashboardScreen() {
           <MetricCard label="Agotados" value={String(outOfStockCount)} imageSource={agotadoIconSource} tone="danger" onPress={() => router.push('/products?filter=out-of-stock')} />
           <MetricCard label="Por vencer" value={String(expiringCount)} imageSource={porvencerIconSource} tone="warning" onPress={() => router.push('/products?filter=expiring')} />
           <MetricCard label="Ventas del día" value={formatCurrency(salesToday)} imageSource={monedasIconSource} onPress={() => router.push('/movements?filter=sale')} />
+          <MetricCard label="Predicciones IA" value="🤖 Ver" imageSource={heroIconSource} onPress={() => router.push('/predictions' as any)} />
         </View>
 
         <View style={styles.alertSection}>

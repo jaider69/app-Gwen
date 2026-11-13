@@ -55,7 +55,6 @@ def predecir_demanda(request: PrediccionRequest):
         raise HTTPException(status_code=500, detail="El modelo de predicción no está cargado en el servidor.")
     
     try:
-        # 1. Obtener stock actual del producto en inventario desde Supabase
         # 1. Obtener stock actual del producto en el inventario de la tienda del usuario actual desde Supabase
         inv_query = supabase.table("inventario").select("stock_actual, stock_minimo, punto_reorden").eq("id_producto", request.id_producto)
         
@@ -74,17 +73,18 @@ def predecir_demanda(request: PrediccionRequest):
         prod_res = supabase.table("productos").select("id_categoria").eq("id_producto", request.id_producto).execute()
         id_categoria = prod_res.data[0].get("id_categoria") if prod_res.data else "general"
 
-        # 3. Construir datos recientes para la predicción (último día registrado o fecha actual)
+        # 3. Construir datos recientes para la predicción usando .weekday() correctamente
         hoy = datetime.now()
+        dia_sem = hoy.weekday()  # 0 = Lunes, 6 = Domingo
         
         # Generar features de prueba basados en el momento actual para las características que espera el modelo
         fila_datos = {
             'anio': hoy.year,
             'mes': hoy.month,
             'dia_mes': hoy.day,
-            'dia_semana': hoy.day_of_week,
+            'dia_semana': dia_sem,
             'semana_anio': hoy.isocalendar()[1],
-            'es_fin_de_semana': 1 if hoy.day_of_week in [5, 6] else 0,
+            'es_fin_de_semana': 1 if dia_sem in [5, 6] else 0,
             'es_dia_quincena': 1 if hoy.day in [15, 30, 31] else 0,
             'lag_1': 2, 'lag_2': 2, 'lag_3': 2, 'lag_7': 2,
             'rolling_mean_7': 2.0, 'rolling_std_7': 0.5,
@@ -106,7 +106,6 @@ def predecir_demanda(request: PrediccionRequest):
         demanda_total_predicha = max(0, round(demanda_diaria_predicha * request.dias_a_predecir))
 
         # 5. Regla de negocio: Restar stock actual para calcular sugerencia de pedido
-        # Si la demanda predicha es mayor que el stock actual, sugerimos la diferencia (más un margen de seguridad)
         sugerencia_pedido = max(0, demanda_total_predicha - stock_actual)
         es_urgente = stock_actual <= punto_reorden or sugerencia_pedido > stock_actual
 

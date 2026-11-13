@@ -94,6 +94,7 @@ def predecir_demanda(request: PrediccionRequest):
         }
 
         # Asegurar que todas las columnas que espera el modelo estén presentes
+       # Asegurar que todas las columnas que espera el modelo estén presentes y con el tipo correcto
         df_input = pd.DataFrame([fila_datos])
         for col in features_esperadas:
             if col not in df_input.columns:
@@ -101,7 +102,12 @@ def predecir_demanda(request: PrediccionRequest):
 
         df_input = df_input[features_esperadas]
 
-        # 4. Predecir demanda diaria y multiplicar por los días solicitados (ej. 7 días = 1 semana)
+        # Convertir columnas categóricas al tipo 'category' si el modelo las registró así
+        for col in ['producto_cat', 'categoria_cat']:
+            if col in df_input.columns:
+                df_input[col] = df_input[col].astype('category')
+
+        # 4. Predecir demanda diaria y multiplicar por los días solicitados
         demanda_diaria_predicha = modelo.predict(df_input)[0]
         demanda_total_predicha = max(0, round(demanda_diaria_predicha * request.dias_a_predecir))
 

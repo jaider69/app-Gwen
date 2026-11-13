@@ -39,7 +39,7 @@ else:
 # ==========================================
 class PrediccionRequest(BaseModel):
     id_producto: str
-    id_tienda: Optional[str] = None
+    id_tienda: str
     dias_a_predecir: Optional[int] = 7  # Por defecto 1 semana
 
 # ==========================================
@@ -56,7 +56,9 @@ def predecir_demanda(request: PrediccionRequest):
     
     try:
         # 1. Obtener stock actual del producto en inventario desde Supabase
+        # 1. Obtener stock actual del producto en el inventario de la tienda del usuario actual desde Supabase
         inv_query = supabase.table("inventario").select("stock_actual, stock_minimo, punto_reorden").eq("id_producto", request.id_producto)
+        
         if request.id_tienda:
             inv_query = inv_query.eq("id_tienda", request.id_tienda)
         
